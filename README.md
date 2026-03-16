@@ -48,7 +48,6 @@ The analysis pipeline is implemented from scratch in Python (NumPy, SciPy, panda
 
 **Daniel Ketterer**
 M.S. Mathematics, Wright State University
-PhD applicant, Economics — Ohio State University (target 2027)
 
 - [GitHub](https://github.com/DanielKetterer)
 - [LinkedIn](https://www.linkedin.com/in/daniel-ketterer/)
