@@ -27,11 +27,12 @@
     --moderate-color: #C9952C;
     --weak-color: #A89888;
     --disconnected-color: #D5CEC4;
-    --node-agency: #6B8F6E;
-    --node-relationships: #C4835C;
-    --node-health: #7BA0B5;
-    --node-material: #B5A050;
-    --node-meaning: #9B7DB8;
+    --node-autonomy: #6B8F6E;
+    --node-mastery: #C4835C;
+    --node-growth: #7BA0B5;
+    --node-relations: #B5A050;
+    --node-purpose: #9B7DB8;
+    --node-acceptance: #C46B7C;
   }
 
   html { font-size: 16px; }
@@ -56,7 +57,6 @@
     flex-direction: column;
   }
 
-  /* ---- HEADER ---- */
   .header {
     text-align: center;
     padding: 48px 0 20px;
@@ -80,11 +80,9 @@
     line-height: 1.5;
   }
 
-  /* ---- SCREENS ---- */
   .screen { display: none; flex-direction: column; flex: 1; }
   .screen.active { display: flex; }
 
-  /* ---- INTRO ---- */
   .intro-content {
     flex: 1;
     display: flex;
@@ -145,7 +143,6 @@
     line-height: 1.5;
   }
 
-  /* ---- BUTTON ---- */
   .btn {
     display: block;
     width: 100%;
@@ -176,7 +173,6 @@
 
   .btn-secondary:hover { border-color: var(--text-muted); }
 
-  /* ---- QUESTIONS ---- */
   .question-progress {
     display: flex;
     gap: 4px;
@@ -228,10 +224,11 @@
   }
 
   .pair-label {
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 500;
     color: var(--text);
     text-align: center;
+    max-width: 90px;
   }
 
   .pair-connector {
@@ -242,7 +239,7 @@
   }
 
   .pair-connector::before {
-    content: '↔';
+    content: '\2194';
     position: absolute;
     top: 50%;
     left: 50%;
@@ -260,6 +257,14 @@
     text-align: center;
     margin-bottom: 28px;
     line-height: 1.4;
+  }
+
+  .question-counter {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    font-weight: 400;
+    margin-bottom: 20px;
   }
 
   .answer-options {
@@ -298,7 +303,6 @@
   .answer-btn .answer-label { font-weight: 500; }
   .answer-btn .answer-desc { font-weight: 300; color: var(--text-muted); font-size: 0.85rem; margin-left: auto; }
 
-  /* ---- RESULTS ---- */
   .results-area {
     flex: 1;
     display: flex;
@@ -376,33 +380,20 @@
     text-underline-offset: 2px;
   }
 
-  /* ---- ANIMATIONS ---- */
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(16px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
-  .fade-up {
-    animation: fadeUp 0.45s ease forwards;
-  }
-
+  .fade-up { animation: fadeUp 0.45s ease forwards; }
   .delay-1 { animation-delay: 0.06s; opacity: 0; }
   .delay-2 { animation-delay: 0.12s; opacity: 0; }
   .delay-3 { animation-delay: 0.18s; opacity: 0; }
   .delay-4 { animation-delay: 0.24s; opacity: 0; }
   .delay-5 { animation-delay: 0.30s; opacity: 0; }
+  .delay-6 { animation-delay: 0.36s; opacity: 0; }
+  .delay-7 { animation-delay: 0.42s; opacity: 0; }
 
-  @keyframes drawLine {
-    from { stroke-dashoffset: 300; }
-    to { stroke-dashoffset: 0; }
-  }
-
-  @keyframes nodeAppear {
-    from { transform: scale(0); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
-
-  /* ---- RESPONSIVE ---- */
   @media (max-width: 380px) {
     .header h1 { font-size: 2rem; }
     .question-text { font-size: 1.2rem; }
@@ -418,65 +409,72 @@
     <p>Discover how the parts of your life connect — not just how they score.</p>
   </div>
 
-  <!-- INTRO SCREEN -->
+  <!-- INTRO -->
   <div id="intro" class="screen active">
     <div class="intro-content">
       <div class="intro-domains">
         <div class="intro-domain fade-up delay-1">
-          <div class="domain-dot" style="background: var(--node-agency)"></div>
+          <div class="domain-dot" style="background: var(--node-autonomy)"></div>
           <div>
-            <h3>Agency</h3>
-            <p>Autonomy, self-efficacy, sense of control over your choices</p>
+            <h3>Autonomy</h3>
+            <p>Independence of thought, self-determination, resisting social pressure to think and act in certain ways</p>
           </div>
         </div>
         <div class="intro-domain fade-up delay-2">
-          <div class="domain-dot" style="background: var(--node-relationships)"></div>
+          <div class="domain-dot" style="background: var(--node-mastery)"></div>
           <div>
-            <h3>Relationships</h3>
-            <p>Social bonds, community belonging, feeling known and supported</p>
+            <h3>Environmental Mastery</h3>
+            <p>Competence in managing your surroundings, making effective use of opportunities, choosing and shaping contexts</p>
           </div>
         </div>
         <div class="intro-domain fade-up delay-3">
-          <div class="domain-dot" style="background: var(--node-health)"></div>
+          <div class="domain-dot" style="background: var(--node-growth)"></div>
           <div>
-            <h3>Health</h3>
-            <p>Physical wellbeing, energy, sleep, bodily stability</p>
+            <h3>Personal Growth</h3>
+            <p>Continued development, openness to new experiences, realizing your potential over time</p>
           </div>
         </div>
         <div class="intro-domain fade-up delay-4">
-          <div class="domain-dot" style="background: var(--node-material)"></div>
+          <div class="domain-dot" style="background: var(--node-relations)"></div>
           <div>
-            <h3>Material Security</h3>
-            <p>Income, housing, food security, access to services</p>
+            <h3>Positive Relations</h3>
+            <p>Warm, trusting connections with others — feeling known, cared for, and able to care in return</p>
           </div>
         </div>
         <div class="intro-domain fade-up delay-5">
-          <div class="domain-dot" style="background: var(--node-meaning)"></div>
+          <div class="domain-dot" style="background: var(--node-purpose)"></div>
           <div>
-            <h3>Meaning</h3>
-            <p>Purpose, coherence, sense of contribution to something larger</p>
+            <h3>Purpose in Life</h3>
+            <p>Sense of direction, goals that give life meaning, feeling there is a point to your present and past</p>
+          </div>
+        </div>
+        <div class="intro-domain fade-up delay-6">
+          <div class="domain-dot" style="background: var(--node-acceptance)"></div>
+          <div>
+            <h3>Self-Acceptance</h3>
+            <p>Positive regard for yourself and your past, acknowledging and accepting your full range of qualities</p>
           </div>
         </div>
       </div>
 
-      <p class="intro-note fade-up delay-5">
-        10 questions · ~90 seconds<br>
+      <p class="intro-note fade-up delay-7">
+        15 questions · ~2 minutes<br>
         No scores — just a map of what feeds what.
       </p>
 
-      <button class="btn btn-primary fade-up delay-5" onclick="startQuestions()">
+      <button class="btn btn-primary fade-up delay-7" onclick="startQuestions()">
         Map my connections
       </button>
     </div>
   </div>
 
-  <!-- QUESTION SCREEN -->
+  <!-- QUESTIONS -->
   <div id="questions" class="screen">
     <div class="question-progress" id="progressBar"></div>
     <div class="question-area" id="questionArea"></div>
   </div>
 
-  <!-- RESULTS SCREEN -->
+  <!-- RESULTS -->
   <div id="results" class="screen">
     <div class="results-area">
       <div class="map-container" id="mapContainer"></div>
@@ -511,6 +509,7 @@
 
       <div class="footer-note">
         Based on the <em>f</em> framework — a general factor of human flourishing.<br>
+        Domains from Ryff's Psychological Well-Being scales (MIDUS).<br>
         <a href="https://github.com/DanielKetterer/Flourishing" target="_blank">Learn about the research →</a>
       </div>
     </div>
@@ -519,31 +518,31 @@
 
 <script>
 const DOMAINS = [
-  { id: 'agency',        name: 'Agency',            emoji: '🧭', color: '#6B8F6E' },
-  { id: 'relationships', name: 'Relationships',     emoji: '🤝', color: '#C4835C' },
-  { id: 'health',        name: 'Health',             emoji: '💚', color: '#7BA0B5' },
-  { id: 'material',      name: 'Material Security', emoji: '🏠', color: '#B5A050' },
-  { id: 'meaning',       name: 'Meaning',           emoji: '✦',  color: '#9B7DB8' },
+  { id: 'autonomy',   name: 'Autonomy',           emoji: '🧭', color: '#6B8F6E' },
+  { id: 'mastery',    name: 'Env. Mastery',        emoji: '🔧', color: '#C4835C' },
+  { id: 'growth',     name: 'Personal Growth',     emoji: '🌱', color: '#7BA0B5' },
+  { id: 'relations',  name: 'Positive Relations',  emoji: '🤝', color: '#B5A050' },
+  { id: 'purpose',    name: 'Purpose in Life',     emoji: '✦',  color: '#9B7DB8' },
+  { id: 'acceptance', name: 'Self-Acceptance',      emoji: '💛', color: '#C46B7C' },
 ];
 
-const PAIRS = [];
-for (let i = 0; i < DOMAINS.length; i++) {
-  for (let j = i + 1; j < DOMAINS.length; j++) {
-    PAIRS.push([i, j]);
-  }
-}
-
+// 15 pairs (6 choose 2) — one question per connection
 const QUESTIONS = [
-  { pair: [0, 1], text: "Does your sense of autonomy help you show up for the people in your life?" },
-  { pair: [0, 2], text: "Does feeling in control of your choices support your physical health?" },
-  { pair: [0, 3], text: "Does your sense of agency help you maintain financial stability?" },
-  { pair: [0, 4], text: "Does your autonomy feed into your sense of purpose?" },
-  { pair: [1, 2], text: "Do your relationships support your physical wellbeing?" },
-  { pair: [1, 3], text: "Do your social bonds contribute to your material security?" },
-  { pair: [1, 4], text: "Do your relationships give your life a sense of meaning?" },
-  { pair: [2, 3], text: "Does your physical health support your ability to earn and stay secure?" },
-  { pair: [2, 4], text: "Does your bodily wellbeing contribute to your sense of purpose?" },
-  { pair: [3, 4], text: "Does your material security free you to pursue what matters most?" },
+  { pair: [0, 1], text: "Does thinking independently help you manage your day-to-day environment effectively?" },
+  { pair: [0, 2], text: "Does your independence of thought support your continued personal development?" },
+  { pair: [0, 3], text: "Does being true to your own values strengthen your closest relationships?" },
+  { pair: [0, 4], text: "Does your self-determination contribute to your sense of purpose?" },
+  { pair: [0, 5], text: "Does thinking for yourself help you accept who you are?" },
+  { pair: [1, 2], text: "Does your ability to manage life's demands create room for personal growth?" },
+  { pair: [1, 3], text: "Does feeling competent in daily life support your relationships?" },
+  { pair: [1, 4], text: "Does managing your circumstances well reinforce your sense of direction?" },
+  { pair: [1, 5], text: "Does handling life effectively help you feel good about yourself?" },
+  { pair: [2, 3], text: "Does growing as a person deepen your connections with others?" },
+  { pair: [2, 4], text: "Does your continued development feed into your sense of purpose?" },
+  { pair: [2, 5], text: "Does opening yourself to new experiences help you accept yourself more fully?" },
+  { pair: [3, 4], text: "Do your close relationships give your life a greater sense of meaning?" },
+  { pair: [3, 5], text: "Does feeling known and cared for help you accept who you are?" },
+  { pair: [4, 5], text: "Does having a sense of direction help you make peace with your past?" },
 ];
 
 const ANSWERS = [
@@ -573,7 +572,6 @@ function renderQuestion() {
   const dA = DOMAINS[q.pair[0]];
   const dB = DOMAINS[q.pair[1]];
 
-  // Progress
   const progressHTML = QUESTIONS.map((_, i) => {
     let cls = 'progress-pip';
     if (i < currentQ) cls += ' done';
@@ -582,9 +580,9 @@ function renderQuestion() {
   }).join('');
   document.getElementById('progressBar').innerHTML = progressHTML;
 
-  // Question
   const area = document.getElementById('questionArea');
   area.innerHTML = `
+    <div class="question-counter fade-up">${currentQ + 1} of ${QUESTIONS.length}</div>
     <div class="question-pair fade-up">
       <div class="pair-node">
         <div class="pair-circle" style="background: ${dA.color}22; border: 2px solid ${dA.color}">${dA.emoji}</div>
@@ -629,19 +627,15 @@ function showResults() {
 
 function drawMap() {
   const container = document.getElementById('mapContainer');
-  const size = 380;
+  const size = 400;
   const cx = size / 2;
   const cy = size / 2;
-  const radius = size * 0.34;
+  const radius = size * 0.33;
 
-  // Pentagon positions (top-centered)
+  // Hexagon node positions
   const nodes = DOMAINS.map((d, i) => {
-    const angle = -Math.PI / 2 + (2 * Math.PI * i) / 5;
-    return {
-      ...d,
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    };
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / 6;
+    return { ...d, x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
   });
 
   let edgesSVG = '';
@@ -651,31 +645,31 @@ function drawMap() {
     const val = responses[i];
 
     let stroke, width, dash, opacity;
-    if (val === 3)      { stroke = '#4A7A4D'; width = 4;   dash = '';       opacity = 0.85; }
-    else if (val === 2) { stroke = '#C9952C'; width = 2.5; dash = '';       opacity = 0.7;  }
-    else if (val === 1) { stroke = '#A89888'; width = 1.5; dash = '';       opacity = 0.5;  }
-    else                { stroke = '#D5CEC4'; width = 1;   dash = '6,4';   opacity = 0.4;  }
+    if (val === 3)      { stroke = '#4A7A4D'; width = 4;   dash = '';     opacity = 0.85; }
+    else if (val === 2) { stroke = '#C9952C'; width = 2.5; dash = '';     opacity = 0.7;  }
+    else if (val === 1) { stroke = '#A89888'; width = 1.5; dash = '';     opacity = 0.5;  }
+    else                { stroke = '#D5CEC4'; width = 1;   dash = '6,4'; opacity = 0.4;  }
 
     const len = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-    const delay = i * 0.08;
+    const delay = i * 0.06;
 
     edgesSVG += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"
       stroke="${stroke}" stroke-width="${width}" stroke-linecap="round"
       stroke-opacity="${opacity}" ${dash ? `stroke-dasharray="${dash}"` : ''}
-      style="stroke-dasharray: ${dash || len}; stroke-dashoffset: ${dash ? 0 : len}; animation: drawLine 0.6s ease ${delay}s forwards;" />`;
+      style="stroke-dasharray: ${dash || len}; stroke-dashoffset: ${dash ? 0 : len}; animation: drawLine 0.5s ease ${delay}s forwards;" />`;
   });
 
   let nodesSVG = '';
   nodes.forEach((n, i) => {
-    const delay = 0.8 + i * 0.1;
+    const delay = 0.9 + i * 0.1;
     nodesSVG += `
       <g style="transform-origin: ${n.x}px ${n.y}px; animation: nodeAppear 0.4s ease ${delay}s both;">
         <circle cx="${n.x}" cy="${n.y}" r="28" fill="${n.color}" opacity="0.12" />
         <circle cx="${n.x}" cy="${n.y}" r="22" fill="#FAF7F2" stroke="${n.color}" stroke-width="2.5" />
         <text x="${n.x}" y="${n.y}" text-anchor="middle" dominant-baseline="central"
-              font-size="16" fill="${n.color}">${n.emoji}</text>
+              font-size="15" fill="${n.color}">${n.emoji}</text>
         <text x="${n.x}" y="${n.y + 38}" text-anchor="middle"
-              font-family="'Source Sans 3', sans-serif" font-size="12" font-weight="500"
+              font-family="'Source Sans 3', sans-serif" font-size="11" font-weight="500"
               fill="#2C2416">${n.name}</text>
       </g>`;
   });
@@ -694,34 +688,44 @@ function drawMap() {
 function renderInsights() {
   const cards = document.getElementById('insightCards');
 
-  // Find weakest and strongest links
-  let weakest = [], strongest = [], disconnected = [];
+  // Per-domain average coupling
+  const domainSums = Array(6).fill(0);
+  const domainCounts = Array(6).fill(0);
   QUESTIONS.forEach((q, i) => {
-    const link = {
-      a: DOMAINS[q.pair[0]].name,
-      b: DOMAINS[q.pair[1]].name,
-      value: responses[i],
-    };
+    domainSums[q.pair[0]] += responses[i];
+    domainCounts[q.pair[0]]++;
+    domainSums[q.pair[1]] += responses[i];
+    domainCounts[q.pair[1]]++;
+  });
+  const domainAvgs = domainSums.map((s, i) => s / domainCounts[i]);
+
+  let disconnected = [], weakest = [], strongest = [];
+  QUESTIONS.forEach((q, i) => {
+    const link = { a: DOMAINS[q.pair[0]].name, b: DOMAINS[q.pair[1]].name, value: responses[i] };
     if (responses[i] === 0) disconnected.push(link);
     else if (responses[i] === 1) weakest.push(link);
     if (responses[i] === 3) strongest.push(link);
   });
 
-  // Average coupling strength
+  let maxDomain = 0, minDomain = 0;
+  domainAvgs.forEach((v, i) => {
+    if (v > domainAvgs[maxDomain]) maxDomain = i;
+    if (v < domainAvgs[minDomain]) minDomain = i;
+  });
+
   const avg = responses.reduce((s, v) => s + v, 0) / responses.length;
 
   let html = '';
 
-  // Overall coupling
   let couplingDesc, couplingAdvice;
   if (avg >= 2.5) {
-    couplingDesc = "Your life domains are tightly interconnected. That's powerful — gains in one area ripple outward. But watch for fragility: if one domain takes a hit, the shock can cascade.";
+    couplingDesc = "Your wellbeing domains are tightly interconnected — gains in one area ripple outward. That's powerful, but watch for fragility: if one domain takes a serious hit, the shock can cascade.";
     couplingAdvice = "Consider building small buffers — routines or supports that don't depend on everything else working perfectly.";
   } else if (avg >= 1.5) {
-    couplingDesc = "You have a mix of strong connections and weaker ones. Some parts of your life reinforce each other well; others operate more independently.";
+    couplingDesc = "You have a mix of strong connections and weaker ones. Some parts of your psychological life reinforce each other well; others operate more independently.";
     couplingAdvice = "The biggest gains come from strengthening the weakest bridge, not raising your highest peak.";
   } else {
-    couplingDesc = "Many of your life domains are operating in relative isolation. Each one might be fine on its own, but they're not feeding each other much.";
+    couplingDesc = "Many of your wellbeing domains are operating in relative isolation. Each one might be holding up on its own, but they're not feeding each other much.";
     couplingAdvice = "Start small: pick the one disconnected pair that surprises you most, and ask what a bridge between them could look like.";
   }
 
@@ -732,31 +736,36 @@ function renderInsights() {
       <p style="margin-top: 10px; color: var(--text);">${couplingAdvice}</p>
     </div>`;
 
-  // Disconnections
-  if (disconnected.length > 0) {
-    const links = disconnected.map(l => `<strong>${l.a} ↔ ${l.b}</strong>`).join(', ');
+  if (domainAvgs[maxDomain] !== domainAvgs[minDomain]) {
     html += `
       <div class="insight-card fade-up delay-1">
-        <h3>Gaps in the map</h3>
-        <p>You flagged ${disconnected.length === 1 ? 'a disconnection' : 'disconnections'} at: ${links}. These are places where one part of your life isn't feeding another at all. That's where the most leverage often hides.</p>
+        <h3>Hub and spoke</h3>
+        <p><strong>${DOMAINS[maxDomain].name}</strong> is your most connected domain — it feeds and is fed by the rest of your system most actively. <strong>${DOMAINS[minDomain].name}</strong> is the most isolated. That's not necessarily a weakness — but it is where building even one stronger connection could have outsized effects.</p>
       </div>`;
   }
 
-  // Strongest links
-  if (strongest.length > 0) {
-    const links = strongest.map(l => `<strong>${l.a} ↔ ${l.b}</strong>`).join(', ');
+  if (disconnected.length > 0) {
+    const links = disconnected.map(l => `<strong>${l.a} \u2194 ${l.b}</strong>`).join(', ');
     html += `
       <div class="insight-card fade-up delay-2">
-        <h3>Where it's working</h3>
-        <p>Your strongest connections: ${links}. These are your system's backbone — the reinforcement loops already operating. Protect these.</p>
+        <h3>Gaps in the map</h3>
+        <p>You flagged ${disconnected.length === 1 ? 'a disconnection' : 'disconnections'} at: ${links}. These are places where one part of your wellbeing isn't feeding another at all. That's often where the most leverage hides.</p>
       </div>`;
   }
 
-  // Key insight
+  if (strongest.length > 0) {
+    const links = strongest.slice(0, 4).map(l => `<strong>${l.a} \u2194 ${l.b}</strong>`).join(', ');
+    html += `
+      <div class="insight-card fade-up delay-3">
+        <h3>Where it's working</h3>
+        <p>Your strongest connections: ${links}${strongest.length > 4 ? ` and ${strongest.length - 4} more` : ''}. These are your system's backbone — the reinforcement loops already operating. Protect these.</p>
+      </div>`;
+  }
+
   html += `
-    <div class="insight-card fade-up delay-3" style="border-color: var(--accent); background: var(--accent-light);">
+    <div class="insight-card fade-up delay-4" style="border-color: var(--accent); background: var(--accent-light);">
       <h3>The <em>f</em> insight</h3>
-      <p>Flourishing isn't about maxing out any single area. It's about the <em>connections between</em> them. A life where health supports relationships, relationships support meaning, and meaning supports agency — that system is more resilient and more alive than any one domain raised in isolation.</p>
+      <p>Flourishing isn't about maxing out any single dimension of wellbeing. It's about the <em>connections between</em> them — what the research calls the mutualism structure. A life where autonomy supports purpose, purpose deepens relationships, and relationships strengthen self-acceptance is more resilient than any one domain raised in isolation.</p>
       <p style="margin-top: 8px;">Your weakest link isn't a failure. It's your highest-leverage opportunity.</p>
     </div>`;
 
@@ -771,7 +780,6 @@ function resetAll() {
 }
 
 function shareResults() {
-  // Encode responses in URL hash
   const encoded = responses.join('');
   const url = window.location.origin + window.location.pathname + '#r=' + encoded;
   navigator.clipboard.writeText(url).then(() => {
@@ -779,19 +787,17 @@ function shareResults() {
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = 'Copy link to share'; }, 2000);
   }).catch(() => {
-    // Fallback
     prompt('Copy this link:', url);
   });
 }
 
-// Load from URL hash if present
 function loadFromHash() {
   const hash = window.location.hash;
   if (hash.startsWith('#r=')) {
     const digits = hash.slice(3);
-    if (digits.length === 10 && /^[0-3]+$/.test(digits)) {
+    if (digits.length === 15 && /^[0-3]+$/.test(digits)) {
       responses = digits.split('').map(Number);
-      currentQ = 10;
+      currentQ = 15;
       showResults();
     }
   }
