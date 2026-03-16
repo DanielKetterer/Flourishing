@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flourishing Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #FAF7F2;
+    --bg-card: #FFFFFF;
+    --text: #2C2416;
+    --text-muted: #8C7E6A;
+    --text-light: #B5A898;
+    --accent: #5B7F5E;
+    --accent-light: #E8F0E8;
+    --warm: #D4A855;
+    --warm-light: #FDF5E6;
+    --weak: #C4B8A8;
+    --disconnected: #E0D8CE;
+    --border: #E8E0D6;
+    --shadow: rgba(44, 36, 22, 0.06);
+    --strong-color: #4A7A4D;
+    --moderate-color: #C9952C;
+    --weak-color: #A89888;
+    --disconnected-color: #D5CEC4;
+    --node-agency: #6B8F6E;
+    --node-relationships: #C4835C;
+    --node-health: #7BA0B5;
+    --node-material: #B5A050;
+    --node-meaning: #9B7DB8;
+  }
+
+  html { font-size: 16px; }
+
+  body {
+    font-family: 'Source Sans 3', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 540px;
+    margin: 0 auto;
+    padding: 0 24px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    text-align: center;
+    padding: 48px 0 20px;
+  }
+
+  .header h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 2.4rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .header p {
+    color: var(--text-muted);
+    font-size: 1rem;
+    font-weight: 300;
+    max-width: 340px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  /* ---- SCREENS ---- */
+  .screen { display: none; flex-direction: column; flex: 1; }
+  .screen.active { display: flex; }
+
+  /* ---- INTRO ---- */
+  .intro-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 20px 0 40px;
+  }
+
+  .intro-domains {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+
+  .intro-domain {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    transition: transform 0.2s;
+  }
+
+  .intro-domain:hover { transform: translateX(4px); }
+
+  .domain-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 7px;
+  }
+
+  .intro-domain h3 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.1rem;
+    font-weight: 400;
+    margin-bottom: 2px;
+  }
+
+  .intro-domain p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 300;
+    line-height: 1.4;
+  }
+
+  .intro-note {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 300;
+    font-style: italic;
+    margin-bottom: 32px;
+    line-height: 1.5;
+  }
+
+  /* ---- BUTTON ---- */
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+  }
+
+  .btn-primary {
+    background: var(--text);
+    color: var(--bg);
+  }
+
+  .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    margin-top: 12px;
+  }
+
+  .btn-secondary:hover { border-color: var(--text-muted); }
+
+  /* ---- QUESTIONS ---- */
+  .question-progress {
+    display: flex;
+    gap: 4px;
+    padding: 24px 0 8px;
+  }
+
+  .progress-pip {
+    flex: 1;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--border);
+    transition: background 0.4s ease;
+  }
+
+  .progress-pip.done { background: var(--accent); }
+  .progress-pip.current { background: var(--warm); }
+
+  .question-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 20px 0 40px;
+  }
+
+  .question-pair {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .pair-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pair-circle {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+  }
+
+  .pair-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    text-align: center;
+  }
+
+  .pair-connector {
+    width: 40px;
+    height: 2px;
+    background: var(--border);
+    position: relative;
+  }
+
+  .pair-connector::before {
+    content: '↔';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg);
+    padding: 0 6px;
+    color: var(--text-light);
+    font-size: 0.9rem;
+  }
+
+  .question-text {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.35rem;
+    font-weight: 400;
+    text-align: center;
+    margin-bottom: 28px;
+    line-height: 1.4;
+  }
+
+  .answer-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .answer-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 18px;
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.95rem;
+    color: var(--text);
+    text-align: left;
+    transition: all 0.2s ease;
+  }
+
+  .answer-btn:hover { border-color: var(--text-muted); transform: translateY(-1px); }
+  .answer-btn:active { transform: translateY(0); }
+
+  .answer-btn .answer-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .answer-btn .answer-label { font-weight: 500; }
+  .answer-btn .answer-desc { font-weight: 300; color: var(--text-muted); font-size: 0.85rem; margin-left: auto; }
+
+  /* ---- RESULTS ---- */
+  .results-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0 40px;
+  }
+
+  .map-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    max-width: 420px;
+    margin: 0 auto 28px;
+  }
+
+  .map-container svg { width: 100%; height: 100%; }
+
+  .insight-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .insight-card h3 {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.2rem;
+    font-weight: 400;
+    margin-bottom: 8px;
+  }
+
+  .insight-card p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-weight: 300;
+    line-height: 1.55;
+  }
+
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  .legend-line {
+    width: 20px;
+    height: 3px;
+    border-radius: 2px;
+  }
+
+  .footer-note {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-light);
+    font-weight: 300;
+    padding: 20px 0 32px;
+    line-height: 1.5;
+  }
+
+  .footer-note a {
+    color: var(--text-muted);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* ---- ANIMATIONS ---- */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-up {
+    animation: fadeUp 0.45s ease forwards;
+  }
+
+  .delay-1 { animation-delay: 0.06s; opacity: 0; }
+  .delay-2 { animation-delay: 0.12s; opacity: 0; }
+  .delay-3 { animation-delay: 0.18s; opacity: 0; }
+  .delay-4 { animation-delay: 0.24s; opacity: 0; }
+  .delay-5 { animation-delay: 0.30s; opacity: 0; }
+
+  @keyframes drawLine {
+    from { stroke-dashoffset: 300; }
+    to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes nodeAppear {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  /* ---- RESPONSIVE ---- */
+  @media (max-width: 380px) {
+    .header h1 { font-size: 2rem; }
+    .question-text { font-size: 1.2rem; }
+    .container { padding: 0 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header fade-up">
+    <h1>Flourishing Map</h1>
+    <p>Discover how the parts of your life connect — not just how they score.</p>
+  </div>
+
+  <!-- INTRO SCREEN -->
+  <div id="intro" class="screen active">
+    <div class="intro-content">
+      <div class="intro-domains">
+        <div class="intro-domain fade-up delay-1">
+          <div class="domain-dot" style="background: var(--node-agency)"></div>
+          <div>
+            <h3>Agency</h3>
+            <p>Autonomy, self-efficacy, sense of control over your choices</p>
+          </div>
+        </div>
+        <div class="intro-domain fade-up delay-2">
+          <div class="domain-dot" style="background: var(--node-relationships)"></div>
+          <div>
+            <h3>Relationships</h3>
+            <p>Social bonds, community belonging, feeling known and supported</p>
+          </div>
+        </div>
+        <div class="intro-domain fade-up delay-3">
+          <div class="domain-dot" style="background: var(--node-health)"></div>
+          <div>
+            <h3>Health</h3>
+            <p>Physical wellbeing, energy, sleep, bodily stability</p>
+          </div>
+        </div>
+        <div class="intro-domain fade-up delay-4">
+          <div class="domain-dot" style="background: var(--node-material)"></div>
+          <div>
+            <h3>Material Security</h3>
+            <p>Income, housing, food security, access to services</p>
+          </div>
+        </div>
+        <div class="intro-domain fade-up delay-5">
+          <div class="domain-dot" style="background: var(--node-meaning)"></div>
+          <div>
+            <h3>Meaning</h3>
+            <p>Purpose, coherence, sense of contribution to something larger</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="intro-note fade-up delay-5">
+        10 questions · ~90 seconds<br>
+        No scores — just a map of what feeds what.
+      </p>
+
+      <button class="btn btn-primary fade-up delay-5" onclick="startQuestions()">
+        Map my connections
+      </button>
+    </div>
+  </div>
+
+  <!-- QUESTION SCREEN -->
+  <div id="questions" class="screen">
+    <div class="question-progress" id="progressBar"></div>
+    <div class="question-area" id="questionArea"></div>
+  </div>
+
+  <!-- RESULTS SCREEN -->
+  <div id="results" class="screen">
+    <div class="results-area">
+      <div class="map-container" id="mapContainer"></div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-line" style="background: var(--strong-color)"></div>
+          Strong
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background: var(--moderate-color)"></div>
+          Moderate
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background: var(--weak-color)"></div>
+          Weak
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background: var(--disconnected-color); border: 1px dashed var(--weak-color); height: 1px;"></div>
+          Disconnected
+        </div>
+      </div>
+
+      <div id="insightCards"></div>
+
+      <button class="btn btn-primary" onclick="resetAll()">
+        Map again
+      </button>
+      <button class="btn btn-secondary" onclick="shareResults()">
+        Copy link to share
+      </button>
+
+      <div class="footer-note">
+        Based on the <em>f</em> framework — a general factor of human flourishing.<br>
+        <a href="https://github.com/DanielKetterer/Flourishing" target="_blank">Learn about the research →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DOMAINS = [
+  { id: 'agency',        name: 'Agency',            emoji: '🧭', color: '#6B8F6E' },
+  { id: 'relationships', name: 'Relationships',     emoji: '🤝', color: '#C4835C' },
+  { id: 'health',        name: 'Health',             emoji: '💚', color: '#7BA0B5' },
+  { id: 'material',      name: 'Material Security', emoji: '🏠', color: '#B5A050' },
+  { id: 'meaning',       name: 'Meaning',           emoji: '✦',  color: '#9B7DB8' },
+];
+
+const PAIRS = [];
+for (let i = 0; i < DOMAINS.length; i++) {
+  for (let j = i + 1; j < DOMAINS.length; j++) {
+    PAIRS.push([i, j]);
+  }
+}
+
+const QUESTIONS = [
+  { pair: [0, 1], text: "Does your sense of autonomy help you show up for the people in your life?" },
+  { pair: [0, 2], text: "Does feeling in control of your choices support your physical health?" },
+  { pair: [0, 3], text: "Does your sense of agency help you maintain financial stability?" },
+  { pair: [0, 4], text: "Does your autonomy feed into your sense of purpose?" },
+  { pair: [1, 2], text: "Do your relationships support your physical wellbeing?" },
+  { pair: [1, 3], text: "Do your social bonds contribute to your material security?" },
+  { pair: [1, 4], text: "Do your relationships give your life a sense of meaning?" },
+  { pair: [2, 3], text: "Does your physical health support your ability to earn and stay secure?" },
+  { pair: [2, 4], text: "Does your bodily wellbeing contribute to your sense of purpose?" },
+  { pair: [3, 4], text: "Does your material security free you to pursue what matters most?" },
+];
+
+const ANSWERS = [
+  { value: 3, label: 'Strongly', desc: 'Clear, active reinforcement', color: '#4A7A4D' },
+  { value: 2, label: 'Somewhat', desc: 'Noticeable but inconsistent', color: '#C9952C' },
+  { value: 1, label: 'Weakly',   desc: 'Barely connected',           color: '#A89888' },
+  { value: 0, label: 'Disconnected', desc: 'No real link',           color: '#D5CEC4' },
+];
+
+let currentQ = 0;
+let responses = [];
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function startQuestions() {
+  currentQ = 0;
+  responses = [];
+  showScreen('questions');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const q = QUESTIONS[currentQ];
+  const dA = DOMAINS[q.pair[0]];
+  const dB = DOMAINS[q.pair[1]];
+
+  // Progress
+  const progressHTML = QUESTIONS.map((_, i) => {
+    let cls = 'progress-pip';
+    if (i < currentQ) cls += ' done';
+    else if (i === currentQ) cls += ' current';
+    return `<div class="${cls}"></div>`;
+  }).join('');
+  document.getElementById('progressBar').innerHTML = progressHTML;
+
+  // Question
+  const area = document.getElementById('questionArea');
+  area.innerHTML = `
+    <div class="question-pair fade-up">
+      <div class="pair-node">
+        <div class="pair-circle" style="background: ${dA.color}22; border: 2px solid ${dA.color}">${dA.emoji}</div>
+        <div class="pair-label">${dA.name}</div>
+      </div>
+      <div class="pair-connector"></div>
+      <div class="pair-node">
+        <div class="pair-circle" style="background: ${dB.color}22; border: 2px solid ${dB.color}">${dB.emoji}</div>
+        <div class="pair-label">${dB.name}</div>
+      </div>
+    </div>
+    <div class="question-text fade-up" style="animation-delay: 0.08s; opacity: 0">
+      ${q.text}
+    </div>
+    <div class="answer-options">
+      ${ANSWERS.map((a, i) => `
+        <button class="answer-btn fade-up" style="animation-delay: ${0.12 + i * 0.05}s; opacity: 0" onclick="answer(${a.value})">
+          <div class="answer-dot" style="background: ${a.color}"></div>
+          <span class="answer-label">${a.label}</span>
+          <span class="answer-desc">${a.desc}</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function answer(value) {
+  responses.push(value);
+  currentQ++;
+  if (currentQ < QUESTIONS.length) {
+    renderQuestion();
+  } else {
+    showResults();
+  }
+}
+
+function showResults() {
+  showScreen('results');
+  drawMap();
+  renderInsights();
+}
+
+function drawMap() {
+  const container = document.getElementById('mapContainer');
+  const size = 380;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size * 0.34;
+
+  // Pentagon positions (top-centered)
+  const nodes = DOMAINS.map((d, i) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / 5;
+    return {
+      ...d,
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+    };
+  });
+
+  let edgesSVG = '';
+  QUESTIONS.forEach((q, i) => {
+    const a = nodes[q.pair[0]];
+    const b = nodes[q.pair[1]];
+    const val = responses[i];
+
+    let stroke, width, dash, opacity;
+    if (val === 3)      { stroke = '#4A7A4D'; width = 4;   dash = '';       opacity = 0.85; }
+    else if (val === 2) { stroke = '#C9952C'; width = 2.5; dash = '';       opacity = 0.7;  }
+    else if (val === 1) { stroke = '#A89888'; width = 1.5; dash = '';       opacity = 0.5;  }
+    else                { stroke = '#D5CEC4'; width = 1;   dash = '6,4';   opacity = 0.4;  }
+
+    const len = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    const delay = i * 0.08;
+
+    edgesSVG += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"
+      stroke="${stroke}" stroke-width="${width}" stroke-linecap="round"
+      stroke-opacity="${opacity}" ${dash ? `stroke-dasharray="${dash}"` : ''}
+      style="stroke-dasharray: ${dash || len}; stroke-dashoffset: ${dash ? 0 : len}; animation: drawLine 0.6s ease ${delay}s forwards;" />`;
+  });
+
+  let nodesSVG = '';
+  nodes.forEach((n, i) => {
+    const delay = 0.8 + i * 0.1;
+    nodesSVG += `
+      <g style="transform-origin: ${n.x}px ${n.y}px; animation: nodeAppear 0.4s ease ${delay}s both;">
+        <circle cx="${n.x}" cy="${n.y}" r="28" fill="${n.color}" opacity="0.12" />
+        <circle cx="${n.x}" cy="${n.y}" r="22" fill="#FAF7F2" stroke="${n.color}" stroke-width="2.5" />
+        <text x="${n.x}" y="${n.y}" text-anchor="middle" dominant-baseline="central"
+              font-size="16" fill="${n.color}">${n.emoji}</text>
+        <text x="${n.x}" y="${n.y + 38}" text-anchor="middle"
+              font-family="'Source Sans 3', sans-serif" font-size="12" font-weight="500"
+              fill="#2C2416">${n.name}</text>
+      </g>`;
+  });
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        @keyframes drawLine { to { stroke-dashoffset: 0; } }
+        @keyframes nodeAppear { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      </style>
+      ${edgesSVG}
+      ${nodesSVG}
+    </svg>`;
+}
+
+function renderInsights() {
+  const cards = document.getElementById('insightCards');
+
+  // Find weakest and strongest links
+  let weakest = [], strongest = [], disconnected = [];
+  QUESTIONS.forEach((q, i) => {
+    const link = {
+      a: DOMAINS[q.pair[0]].name,
+      b: DOMAINS[q.pair[1]].name,
+      value: responses[i],
+    };
+    if (responses[i] === 0) disconnected.push(link);
+    else if (responses[i] === 1) weakest.push(link);
+    if (responses[i] === 3) strongest.push(link);
+  });
+
+  // Average coupling strength
+  const avg = responses.reduce((s, v) => s + v, 0) / responses.length;
+
+  let html = '';
+
+  // Overall coupling
+  let couplingDesc, couplingAdvice;
+  if (avg >= 2.5) {
+    couplingDesc = "Your life domains are tightly interconnected. That's powerful — gains in one area ripple outward. But watch for fragility: if one domain takes a hit, the shock can cascade.";
+    couplingAdvice = "Consider building small buffers — routines or supports that don't depend on everything else working perfectly.";
+  } else if (avg >= 1.5) {
+    couplingDesc = "You have a mix of strong connections and weaker ones. Some parts of your life reinforce each other well; others operate more independently.";
+    couplingAdvice = "The biggest gains come from strengthening the weakest bridge, not raising your highest peak.";
+  } else {
+    couplingDesc = "Many of your life domains are operating in relative isolation. Each one might be fine on its own, but they're not feeding each other much.";
+    couplingAdvice = "Start small: pick the one disconnected pair that surprises you most, and ask what a bridge between them could look like.";
+  }
+
+  html += `
+    <div class="insight-card fade-up">
+      <h3>Your coupling strength</h3>
+      <p>${couplingDesc}</p>
+      <p style="margin-top: 10px; color: var(--text);">${couplingAdvice}</p>
+    </div>`;
+
+  // Disconnections
+  if (disconnected.length > 0) {
+    const links = disconnected.map(l => `<strong>${l.a} ↔ ${l.b}</strong>`).join(', ');
+    html += `
+      <div class="insight-card fade-up delay-1">
+        <h3>Gaps in the map</h3>
+        <p>You flagged ${disconnected.length === 1 ? 'a disconnection' : 'disconnections'} at: ${links}. These are places where one part of your life isn't feeding another at all. That's where the most leverage often hides.</p>
+      </div>`;
+  }
+
+  // Strongest links
+  if (strongest.length > 0) {
+    const links = strongest.map(l => `<strong>${l.a} ↔ ${l.b}</strong>`).join(', ');
+    html += `
+      <div class="insight-card fade-up delay-2">
+        <h3>Where it's working</h3>
+        <p>Your strongest connections: ${links}. These are your system's backbone — the reinforcement loops already operating. Protect these.</p>
+      </div>`;
+  }
+
+  // Key insight
+  html += `
+    <div class="insight-card fade-up delay-3" style="border-color: var(--accent); background: var(--accent-light);">
+      <h3>The <em>f</em> insight</h3>
+      <p>Flourishing isn't about maxing out any single area. It's about the <em>connections between</em> them. A life where health supports relationships, relationships support meaning, and meaning supports agency — that system is more resilient and more alive than any one domain raised in isolation.</p>
+      <p style="margin-top: 8px;">Your weakest link isn't a failure. It's your highest-leverage opportunity.</p>
+    </div>`;
+
+  cards.innerHTML = html;
+}
+
+function resetAll() {
+  currentQ = 0;
+  responses = [];
+  showScreen('intro');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function shareResults() {
+  // Encode responses in URL hash
+  const encoded = responses.join('');
+  const url = window.location.origin + window.location.pathname + '#r=' + encoded;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = event.target;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy link to share'; }, 2000);
+  }).catch(() => {
+    // Fallback
+    prompt('Copy this link:', url);
+  });
+}
+
+// Load from URL hash if present
+function loadFromHash() {
+  const hash = window.location.hash;
+  if (hash.startsWith('#r=')) {
+    const digits = hash.slice(3);
+    if (digits.length === 10 && /^[0-3]+$/.test(digits)) {
+      responses = digits.split('').map(Number);
+      currentQ = 10;
+      showResults();
+    }
+  }
+}
+
+window.addEventListener('load', loadFromHash);
+</script>
+</body>
+</html>
