@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Spectral Equivalence Theorem</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$']],
+    displayMath: [['$$', '$$']],
+    macros: {
+      R: '\\mathbb{R}',
+      bx: '\\mathbf{x}',
+      bv: '\\mathbf{v}',
+      bw: '\\mathbf{w}',
+      bW: '\\mathbf{W}',
+      bq: '\\mathbf{q}',
+      be: '\\mathbf{e}',
+      boldeta: '\\boldsymbol{\\eta}'
+    }
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<style>
+  :root {
+    --bg: #fdfdfd;
+    --text: #1a1a1a;
+    --accent: #2c5f8a;
+    --accent-light: #e8f0f8;
+    --border: #c8d8e8;
+    --gray: #555;
+    --box-bg: #f6f9fc;
+    --highlight-bg: #fff8e1;
+    --highlight-border: #e6c84c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3rem 2rem 5rem;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    font-size: 17px;
+  }
+  h1 {
+    font-size: 1.9rem;
+    margin-bottom: 0.3rem;
+    color: var(--accent);
+    line-height: 1.3;
+  }
+  .subtitle {
+    font-size: 1.05rem;
+    color: var(--gray);
+    margin-bottom: 0.4rem;
+    font-style: italic;
+  }
+  .author {
+    font-size: 0.95rem;
+    color: var(--gray);
+    margin-bottom: 2.5rem;
+  }
+  h2 {
+    font-size: 1.35rem;
+    color: var(--accent);
+    margin-top: 2.5rem;
+    margin-bottom: 0.8rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.3rem;
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--text);
+    margin-top: 1.8rem;
+    margin-bottom: 0.5rem;
+  }
+  p {
+    margin-bottom: 1rem;
+    text-align: justify;
+    hyphens: auto;
+  }
+  .definition, .theorem, .proof-box, .remark, .lemma {
+    border-left: 3px solid var(--accent);
+    background: var(--box-bg);
+    padding: 1rem 1.2rem;
+    margin: 1.5rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .theorem {
+    border-left-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .lemma {
+    border-left-color: #5a8a6a;
+    background: #f0f7f2;
+  }
+  .proof-box {
+    border-left-color: var(--gray);
+    background: #fafafa;
+  }
+  .remark {
+    border-left-color: var(--highlight-border);
+    background: var(--highlight-bg);
+  }
+  .box-label {
+    font-weight: bold;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+  }
+  .lemma .box-label { color: #3a6a4a; }
+  .proof-box .box-label { color: var(--gray); }
+  .remark .box-label { color: #8a7020; }
+  .qed {
+    text-align: right;
+    margin-top: 0.5rem;
+    font-size: 1.1rem;
+  }
+  .prereq-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 1rem;
+  }
+  .prereq-list li {
+    padding: 0.2rem 0 0.2rem 1.5rem;
+    position: relative;
+  }
+  .prereq-list li::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+  }
+  .toc {
+    background: var(--box-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.2rem 1.5rem;
+    margin: 1.5rem 0 2rem;
+  }
+  .toc-title {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+  }
+  .toc ol {
+    padding-left: 1.5rem;
+    margin: 0;
+  }
+  .toc li {
+    padding: 0.15rem 0;
+  }
+  .toc a {
+    color: var(--text);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--border);
+  }
+  .toc a:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .step-marker {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    width: 1.6em;
+    height: 1.6em;
+    line-height: 1.6em;
+    text-align: center;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: bold;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2rem 0;
+  }
+  .footnote {
+    font-size: 0.9rem;
+    color: var(--gray);
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+  .diagram-container {
+    text-align: center;
+    margin: 1.5rem 0;
+  }
+  .diagram-container svg {
+    max-width: 100%;
+  }
+  .caption {
+    font-size: 0.9rem;
+    color: var(--gray);
+    text-align: center;
+    margin-top: 0.3rem;
+    font-style: italic;
+  }
+  @media (max-width: 600px) {
+    body { padding: 1.5rem 1rem 3rem; font-size: 16px; }
+    h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>The Dynamical-Spectral Equivalence Theorem</h1>
+<p class="subtitle">Why the Dominant Dynamical Mode Equals the First Principal Component</p>
+<p class="author">Daniel Ketterer &mdash; from the <em>Toward f</em> project, 2026</p>
+
+<div class="toc">
+  <div class="toc-title">Contents</div>
+  <ol>
+    <li><a href="#s1">Prerequisites and Notation</a></li>
+    <li><a href="#s2">Coupled Systems Near Equilibrium</a></li>
+    <li><a href="#s3">The Jacobian: Encoding How Domains Interact</a></li>
+    <li><a href="#s4">Adding Noise: The Ornstein&ndash;Uhlenbeck Process</a></li>
+    <li><a href="#s5">The Stationary Covariance and the Lyapunov Equation</a></li>
+    <li><a href="#s6">The Main Result: Spectral Equivalence Under Symmetry</a></li>
+    <li><a href="#s7">Interpretation: What This Means for Flourishing</a></li>
+    <li><a href="#s8">Looking Ahead: What Happens Without Symmetry</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s1">1. Prerequisites and Notation</h2>
+
+<p>
+This derivation requires the following background, all at the level of a standard undergraduate course:
+</p>
+
+<ul class="prereq-list">
+  <li><strong>Linear algebra.</strong> Eigenvalues and eigenvectors, symmetric matrices, the spectral theorem, matrix diagonalization, positive definiteness.</li>
+  <li><strong>Multivariate statistics.</strong> Covariance matrices, principal component analysis (PCA) as an eigendecomposition of the covariance matrix.</li>
+  <li><strong>Ordinary differential equations.</strong> Systems of linear ODEs, equilibria, linearization of nonlinear systems.</li>
+</ul>
+
+<p>
+We will develop the stochastic dynamics and the Lyapunov equation from scratch&mdash;these are the new pieces. The payoff is a clean theorem connecting two seemingly different objects: the <em>dynamics</em> of a coupled system and the <em>statistics</em> of the data it produces.
+</p>
+
+<h3>Notation</h3>
+<p>
+Throughout, we work with $n$ coupled variables (in the flourishing application, $n = 6$ wellbeing domains). We write:
+</p>
+<p>
+$\bx(t) \in \R^n$&mdash;the state vector at time $t$ (each component is a domain's level).
+</p>
+<p>
+$J \in \R^{n \times n}$&mdash;the Jacobian matrix evaluated at equilibrium. Entry $J_{ij}$ encodes how domain $j$ influences the rate of change of domain $i$.
+</p>
+<p>
+$\Sigma \in \R^{n \times n}$&mdash;the stationary covariance matrix of $\bx$. Entry $\Sigma_{ij}$ is the covariance between domains $i$ and $j$ in the long run.
+</p>
+<p>
+$I$&mdash;the $n \times n$ identity matrix. $\sigma^2 > 0$&mdash;a scalar noise intensity.
+</p>
+
+<!-- ============================================================ -->
+<h2 id="s2">2. Coupled Systems Near Equilibrium</h2>
+
+<p>
+Suppose we have $n$ quantities&mdash;call them <em>domains</em>&mdash;that evolve over time and influence one another. In the flourishing context these are Ryff's six dimensions of psychological wellbeing: Autonomy, Environmental Mastery, Personal Growth, Positive Relations, Purpose in Life, and Self-Acceptance. But the mathematics applies to any mutualistic coupled system.
+</p>
+
+<p>
+We model their dynamics with a system of ordinary differential equations:
+</p>
+
+$$
+\frac{d\bx}{dt} = F(\bx)
+$$
+
+<p>
+where $F : \R^n \to \R^n$ describes how the state evolves. We assume the system has a stable equilibrium point $\bx^*$ satisfying $F(\bx^*) = \mathbf{0}$. Near this equilibrium, the system "wants" to return to $\bx^*$ after a small displacement.
+</p>
+
+<p>
+The standard move is to <em>linearize</em>. Define the deviation $\boldeta(t) = \bx(t) - \bx^*$. For small $\boldeta$, a first-order Taylor expansion gives:
+</p>
+
+$$
+\frac{d\boldeta}{dt} \approx J\,\boldeta
+$$
+
+<p>
+where $J$ is the Jacobian matrix of $F$ evaluated at $\bx^*$:
+</p>
+
+$$
+J_{ij} = \frac{\partial F_i}{\partial x_j}\bigg|_{\bx = \bx^*}
+$$
+
+<p>
+This is the linear system that governs small perturbations around equilibrium. Everything that follows operates in this linearized regime.
+</p>
+
+<div class="remark">
+  <div class="box-label">Remark &mdash; Stability</div>
+  <p>For $\bx^*$ to be a <em>stable</em> equilibrium, all eigenvalues of $J$ must have strictly negative real parts. This ensures that every perturbation decays back toward equilibrium rather than growing. We assume this throughout.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s3">3. The Jacobian: Encoding How Domains Interact</h2>
+
+<p>
+The Jacobian $J$ is the central object. Its entries carry precise meaning:
+</p>
+
+<p>
+$J_{ij} > 0$ means domain $j$ <em>promotes</em> domain $i$. An increase in $j$ causes $i$ to grow faster.
+</p>
+<p>
+$J_{ij} < 0$ means domain $j$ <em>inhibits</em> domain $i$.
+</p>
+<p>
+$J_{ii} < 0$ (the diagonal entries) represents <em>self-regulation</em>&mdash;each domain has a restoring force pulling it back toward its own equilibrium level.
+</p>
+
+<p>
+In a mutualistic system like the one underlying $f$, the off-diagonal entries are predominantly positive: domains help each other. Good relationships support purpose; mastery reinforces self-acceptance; growth feeds autonomy.
+</p>
+
+<h3>Symmetric vs. Asymmetric Coupling</h3>
+
+<p>
+The Jacobian is <strong>symmetric</strong> if $J_{ij} = J_{ji}$ for all $i, j$. This means the influence of domain $j$ on domain $i$ equals the influence of $i$ on $j$. In practice, perfect symmetry is an idealization. But it is the case where the theory is cleanest, and it will be our starting point.
+</p>
+
+<p>
+When $J$ is symmetric, the spectral theorem guarantees:
+</p>
+
+$$
+J = Q\Lambda Q^\top
+$$
+
+<p>
+where $Q$ is an orthogonal matrix whose columns $\bq_1, \dots, \bq_n$ are the eigenvectors of $J$, and $\Lambda = \operatorname{diag}(\lambda_1, \dots, \lambda_n)$ is the diagonal matrix of eigenvalues, all real, all negative (by our stability assumption). We order them as:
+</p>
+
+$$
+\lambda_1 > \lambda_2 > \cdots > \lambda_n, \qquad \text{with each } \lambda_k < 0.
+$$
+
+<p>
+Note the ordering: $\lambda_1$ is the <em>least negative</em> eigenvalue&mdash;the one closest to zero. This is the <strong>dominant eigenvalue</strong>, and its eigenvector $\bq_1$ is the <strong>dominant mode</strong>. Perturbations in the direction of $\bq_1$ decay the <em>slowest</em>&mdash;this mode is the most persistent, the hardest to push down, the direction in which the system is most "responsive."
+</p>
+
+<div class="remark">
+  <div class="box-label">Remark &mdash; Intuition for Dominance</div>
+  <p>Think of a ball in a bowl. The bowl might be steep in one direction (fast restoring force) and gentle in another (slow restoring force). The gentle direction is the dominant mode&mdash;displace the ball that way, and it takes the longest to roll back. In a wellbeing system, the dominant mode is the pattern of correlated change across domains that the system is slowest to correct.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s4">4. Adding Noise: The Ornstein&ndash;Uhlenbeck Process</h2>
+
+<p>
+Real systems don't sit perfectly at equilibrium. People experience ongoing shocks: a job loss, a new friendship, an illness, a moment of insight. To capture this, we add stochastic forcing to the linearized system:
+</p>
+
+$$
+d\boldeta = J\,\boldeta\,dt + \sigma\,d\bW(t)
+$$
+
+<p>
+This is a <strong>multivariate Ornstein&ndash;Uhlenbeck (OU) process</strong>. Here:
+</p>
+
+<p>
+$\bW(t) \in \R^n$ is a vector of independent standard Wiener processes (Brownian motions). Each component $W_i(t)$ represents random, continuous perturbations to domain $i$.
+</p>
+
+<p>
+$\sigma > 0$ scales the intensity of the noise. For simplicity, we assume all domains receive noise of the same intensity (isotropic noise). This can be generalized, but the isotropic case gives the cleanest result and is the right starting point.
+</p>
+
+<p>
+If you haven't encountered stochastic differential equations before, the essential point is this: the OU process describes a system that is <em>always being pushed away from equilibrium by random shocks</em> and <em>always being pulled back by the restoring dynamics encoded in $J$</em>. The competition between these two forces produces a stationary distribution&mdash;a stable probabilistic "cloud" of states around $\bx^*$.
+</p>
+
+<div class="definition">
+  <div class="box-label">Definition &mdash; Stationary Covariance</div>
+  <p>If $J$ is stable (all eigenvalues have negative real part), the OU process admits a unique stationary (long-run) distribution, which is multivariate Gaussian with mean $\mathbf{0}$ (i.e., centered at $\bx^*$) and covariance matrix $\Sigma$. This $\Sigma$ is the object we would estimate from data: if we observed many individuals at statistical equilibrium and computed their sample covariance matrix, it would converge to $\Sigma$.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s5">5. The Stationary Covariance and the Lyapunov Equation</h2>
+
+<p>
+The crucial question is: <em>what determines $\Sigma$?</em> The answer comes from a fundamental result in stochastic dynamics.
+</p>
+
+<div class="theorem">
+  <div class="box-label">The Continuous Lyapunov Equation</div>
+  <p>For the multivariate OU process $\;d\boldeta = J\boldeta\,dt + \sigma\,d\bW$ with stable $J$, the stationary covariance matrix $\Sigma$ is the unique positive-definite solution to:</p>
+  $$J\Sigma + \Sigma J^\top = -\sigma^2 I$$
+</div>
+
+<p>
+This equation says that $\Sigma$ is entirely determined by the dynamics ($J$) and the noise ($\sigma^2 I$). No other information is needed.
+</p>
+
+<h3>Where Does This Come From?</h3>
+
+<p>
+Here is a self-contained derivation. Consider the covariance at time $t$: $\;P(t) = \mathbb{E}[\boldeta(t)\,\boldeta(t)^\top]$. Differentiating (and using the product rule for stochastic processes, known as It&ocirc;'s formula):
+</p>
+
+$$
+\frac{dP}{dt} = J\,P(t) + P(t)\,J^\top + \sigma^2 I
+$$
+
+<p>
+The three terms have clear meanings: $J\,P(t)$ captures how the dynamics stretch the covariance, $P(t)\,J^\top$ is the transpose contribution (covariance is a bilinear form, so both "sides" of $\boldeta$ are being evolved by $J$), and $\sigma^2 I$ is the continuous injection of variance by the noise.
+</p>
+
+<p>
+At stationarity, the covariance is no longer changing: $dP/dt = 0$. Setting $P(t) = \Sigma$:
+</p>
+
+$$
+J\Sigma + \Sigma J^\top + \sigma^2 I = 0
+$$
+
+<p>
+which is the Lyapunov equation. $\square$
+</p>
+
+<!-- ============================================================ -->
+<h2 id="s6">6. The Main Result: Spectral Equivalence Under Symmetry</h2>
+
+<p>
+We now have all the ingredients. The theorem connects the eigenstructure of $J$ (the dynamics) to the eigenstructure of $\Sigma$ (the statistics).
+</p>
+
+<div class="theorem">
+  <div class="box-label">Theorem &mdash; Spectral Equivalence</div>
+  <p>Let $J \in \R^{n \times n}$ be symmetric and stable (all eigenvalues strictly negative). Let $\Sigma$ be the stationary covariance of the OU process with isotropic noise intensity $\sigma^2$. Then:</p>
+  <p><strong>(a)</strong> $J$ and $\Sigma$ share the same eigenvectors.</p>
+  <p><strong>(b)</strong> If $\lambda_k$ is an eigenvalue of $J$ with eigenvector $\bq_k$, then $\bq_k$ is an eigenvector of $\Sigma$ with eigenvalue</p>
+  $$\mu_k = \frac{-\sigma^2}{2\lambda_k}$$
+  <p><strong>(c)</strong> The dominant mode of $J$ (eigenvector for the least negative eigenvalue $\lambda_1$) is the first principal component of $\Sigma$ (eigenvector for the largest eigenvalue $\mu_1$).</p>
+</div>
+
+<div class="proof-box">
+  <div class="box-label">Proof</div>
+  
+  <p><span class="step-marker">1</span> <strong>Setup.</strong> Since $J$ is real and symmetric, the spectral theorem gives us $J = Q\Lambda Q^\top$ where $Q$ is orthogonal and $\Lambda = \operatorname{diag}(\lambda_1, \dots, \lambda_n)$ with $\lambda_1 > \lambda_2 > \cdots > \lambda_n$ (all negative).</p>
+
+  <p><span class="step-marker">2</span> <strong>Ansatz.</strong> We guess that $\Sigma$ is simultaneously diagonalized by $Q$. That is, we try $\Sigma = Q\,M\,Q^\top$ where $M = \operatorname{diag}(\mu_1, \dots, \mu_n)$ is a diagonal matrix of unknown eigenvalues $\mu_k > 0$.</p>
+
+  <p><span class="step-marker">3</span> <strong>Substitution into the Lyapunov equation.</strong> Since $J$ is symmetric, $J^\top = J$, and the Lyapunov equation reads $J\Sigma + \Sigma J = -\sigma^2 I$. Substituting both decompositions:</p>
+  
+  $$
+  (Q\Lambda Q^\top)(Q\,M\,Q^\top) + (Q\,M\,Q^\top)(Q\Lambda Q^\top) = -\sigma^2 I
+  $$
+
+  <p>Using orthogonality ($Q^\top Q = I$) and $I = QQ^\top$:</p>
+
+  $$
+  Q\Lambda M Q^\top + Q M \Lambda Q^\top = -\sigma^2 Q Q^\top
+  $$
+
+  <p>Multiply on the left by $Q^\top$ and on the right by $Q$:</p>
+
+  $$
+  \Lambda M + M\Lambda = -\sigma^2 I
+  $$
+
+  <p><span class="step-marker">4</span> <strong>Diagonal reduction.</strong> Since $\Lambda$ and $M$ are both diagonal, the left-hand side is diagonal with $(k,k)$-entry $\lambda_k \mu_k + \mu_k \lambda_k = 2\lambda_k\mu_k$. The right-hand side has $(k,k)$-entry $-\sigma^2$. So:</p>
+
+  $$
+  2\lambda_k \mu_k = -\sigma^2 \qquad \Longrightarrow \qquad \mu_k = \frac{-\sigma^2}{2\lambda_k}
+  $$
+
+  <p>Since each $\lambda_k < 0$, we have $\mu_k > 0$, confirming $\Sigma$ is positive definite. The ansatz is verified: $\Sigma = Q\,M\,Q^\top$ is indeed the (unique) solution. This proves <strong>(a)</strong> and <strong>(b)</strong>.</p>
+
+  <p><span class="step-marker">5</span> <strong>Order reversal.</strong> The map $\lambda \mapsto -\sigma^2/(2\lambda)$ is a decreasing function on the negative reals (differentiate: $d\mu/d\lambda = \sigma^2/(2\lambda^2) > 0$&mdash;wait, let's be careful). Actually: for $\lambda < 0$, as $\lambda$ increases toward zero, $-1/\lambda$ increases toward $+\infty$, so $\mu = -\sigma^2/(2\lambda)$ increases. Therefore:</p>
+
+  $$
+  \lambda_1 > \lambda_2 > \cdots > \lambda_n \quad \Longrightarrow \quad \mu_1 > \mu_2 > \cdots > \mu_n
+  $$
+
+  <p>The <em>least negative</em> eigenvalue of $J$ maps to the <em>largest</em> eigenvalue of $\Sigma$. Both are associated with the same eigenvector $\bq_1$. This proves <strong>(c)</strong>.</p>
+
+  <div class="qed">$\blacksquare$</div>
+</div>
+
+<p>
+That's the whole proof. The key insight is step 3: the shared eigenbasis lets you reduce the matrix Lyapunov equation to $n$ independent scalar equations, one per mode. Symmetry of $J$ is what provides the shared eigenbasis via the spectral theorem.
+</p>
+
+<div class="remark">
+  <div class="box-label">Remark &mdash; The Inversion Formula</div>
+  <p>The theorem also hands us an explicit relationship between the two matrices. From $\Sigma = Q\,\operatorname{diag}(-\sigma^2/(2\lambda_k))\,Q^\top$ and $J = Q\Lambda Q^\top$, simple algebra gives:</p>
+  $$J = -\tfrac{\sigma^2}{2}\,\Sigma^{-1}$$
+  <p>The Jacobian is (up to a scalar) the <em>inverse</em> of the covariance matrix. This is the formula $J = -\frac{1}{2}\Sigma^{-1}$ (setting $\sigma^2 = 1$ for unit noise), which appears in the <em>Toward f</em> pipeline as the exact Lyapunov inversion calibration.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s7">7. Interpretation: What This Means for Flourishing</h2>
+
+<p>
+The theorem establishes a bridge between two perspectives on the same system:
+</p>
+
+<p>
+<strong>The dynamicist</strong> looks at $J$ and asks: <em>what patterns of perturbation persist longest?</em> The answer is the dominant eigenvector $\bq_1$&mdash;the mode with the slowest decay rate $|\lambda_1|$. This is the direction the system is most "responsive" in, the collective pattern that the restoring forces are weakest against.
+</p>
+
+<p>
+<strong>The statistician</strong> looks at $\Sigma$ and asks: <em>what pattern of variation explains the most covariance?</em> The answer is the first principal component: the eigenvector of $\Sigma$ with the largest eigenvalue $\mu_1$.
+</p>
+
+<p>
+The theorem says these are the <em>same direction</em>. The pattern that explains the most statistical variation across individuals is exactly the pattern that decays most slowly in the dynamics. This is not a coincidence or an approximation&mdash;it is an algebraic identity under the assumptions stated.
+</p>
+
+<h3>For the $f$ Construct Specifically</h3>
+
+<p>
+When we extract the first principal component from wellbeing data (Ryff PWB subscales across thousands of MIDUS respondents), we are recovering something that has a precise dynamical interpretation: it is the <strong>dominant mode of the system</strong>&mdash;the collective direction along which the coupled wellbeing domains are most strongly and persistently correlated. Calling this mode $f$ isn't just a convenient label. It's a claim that the statistical pattern reflects a real dynamical property of the underlying coupled system: its primary axis of coherent response.
+</p>
+
+<p>
+The quantitative relationship $\mu_k = -\sigma^2/(2\lambda_k)$ also tells us something specific: the variance explained by each principal component is <em>inversely proportional</em> to the corresponding decay rate. Components that explain a lot of variance correspond to slow dynamical modes. The dominant factor in a wellbeing survey isn't the "most important" variable in some vague sense&mdash;it's the mode whose perturbations take the longest to decay, whose effects ripple most persistently through the coupled system.
+</p>
+
+<!-- ============================================================ -->
+<h2 id="s8">8. Looking Ahead: What Happens Without Symmetry</h2>
+
+<p>
+The theorem above requires $J$ to be symmetric. In reality, couplings between wellbeing domains are unlikely to be perfectly reciprocal: the effect of Positive Relations on Purpose in Life need not equal the reverse. What happens when $J_{ij} \neq J_{ji}$?
+</p>
+
+<p>
+Any square matrix can be decomposed into symmetric and antisymmetric parts:
+</p>
+
+$$
+J = \underbrace{\tfrac{1}{2}(J + J^\top)}_{S} + \underbrace{\tfrac{1}{2}(J - J^\top)}_{A}
+$$
+
+<p>
+where $S = S^\top$ and $A = -A^\top$. The Lyapunov equation becomes:
+</p>
+
+$$
+S\Sigma + \Sigma S + A\Sigma + \Sigma A^\top = -\sigma^2 I
+$$
+
+<p>
+Since $A^\top = -A$, the antisymmetric contribution is $A\Sigma - \Sigma A$, which is a <em>commutator</em> $[A, \Sigma]$. This term vanishes if and only if $A$ and $\Sigma$ commute. In general they do not, so the antisymmetric part of the Jacobian <em>does</em> affect the stationary covariance&mdash;and breaks the clean eigenvector correspondence.
+</p>
+
+<p>
+The question then becomes: <em>by how much?</em> If the antisymmetric part is small relative to the symmetric part (i.e., couplings are approximately reciprocal), standard matrix perturbation theory (the Davis&ndash;Kahan theorem, Weyl's inequalities) gives bounds on how far the eigenvectors of $\Sigma$ can rotate away from those of $S$. This is the subject of the next note in this series: a perturbation analysis quantifying the deviation of PC1 from the dominant dynamical mode as a function of coupling asymmetry.
+</p>
+
+<p>
+For now, the symmetric case establishes the clean baseline and the conceptual anchor: <em>the statistics and the dynamics are two views of the same structure.</em>
+</p>
+
+<hr>
+
+<div class="footnote">
+  <p><strong>Suggested reading.</strong> For dynamical systems background: Strogatz, <em>Nonlinear Dynamics and Chaos</em>, chapters 5&ndash;6 (linear systems, phase plane). For the Ornstein&ndash;Uhlenbeck process: Gardiner, <em>Stochastic Methods</em>, chapter 4. For matrix perturbation theory: Stewart &amp; Sun, <em>Matrix Perturbation Theory</em>, or the more accessible treatment in Trefethen &amp; Bau, <em>Numerical Linear Algebra</em>, lecture 32.</p>
+  <p>This note is part of the <em>Toward f</em> project. Code and data: <a href="https://github.com/DanielKetterer/Flourishing">github.com/DanielKetterer/Flourishing</a>.</p>
+</div>
+
+</body>
+</html>
