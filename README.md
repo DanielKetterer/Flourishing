@@ -50,7 +50,7 @@ The analysis pipeline is implemented from scratch in Python (NumPy, SciPy, panda
 M.S. Mathematics, Wright State University
 
 - [GitHub](https://github.com/DanielKetterer)
-- [LinkedIn](https://www.linkedin.com/in/daniel-ketterer/)
+- [LinkedIn](https://www.linkedin.com/in/daniel-ketterer-math/)
 
 ## License
 
