@@ -1,6 +1,6 @@
-**Flourishing**  
+## **Flourishing**  
 
-**Devoted to the mathematics and science of human flourishing.**
+## **Devoted to the mathematics and science of human flourishing.**
 
 This repository contains the complete research code, data pipeline, and manuscript for *Toward f: A General Factor of Human Flourishing* (Daniel Ketterer, 2026). The project establishes a general factor of wellbeing (*f*) — analogous to Spearman’s *g* in intelligence — using individual-level MIDUS data, then tests its predictive power and formalizes it as a dynamical system of cross-domain mutualism.
 
