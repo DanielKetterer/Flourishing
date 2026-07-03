@@ -359,7 +359,6 @@ def run_h2b(h2a: dict, lookups_dir: str | None, seed: int,
     """Mixed-effects regression of indicator-level non-invariance magnitude
     on cultural distance x domain contrast, translation covariate partialed,
     country random intercept. Verdict issued only at H2a Tier 1/2."""
-    import statsmodels.formula.api as smf
     from .data_io import load_lookup
     cfg = C.H2
     countries = h2a["countries"]
@@ -408,8 +407,7 @@ def run_h2b(h2a: dict, lookups_dir: str | None, seed: int,
         t_src = "ZERO_PLACEHOLDER (translation covariate not supplied)"
     df["dist_c"] = df["dist"] - df["dist"].mean()
 
-    md = smf.mixedlm("noninv ~ dist_c * focal + T", df,
-                     groups=df["country"]).fit(reml=True, method="lbfgs")
+    md, model_kind, model_warning = _fit_h2b_model(df)
     coef = float(md.params.get("dist_c:focal", np.nan))
     pval = float(md.pvalues.get("dist_c:focal", np.nan))
     gated = h2a["tier"] <= 2
@@ -423,8 +421,57 @@ def run_h2b(h2a: dict, lookups_dir: str | None, seed: int,
         verdict = "disconfirmed"
     return dict(verdict=verdict, interaction_coef=coef, interaction_p=pval,
                 distance_source=dist_src, translation_source=t_src,
+                model_kind=model_kind, model_warning=model_warning,
                 model_summary=str(md.summary()), data=df,
                 median_split=_median_split_sensitivity(df))
+
+
+def _fit_h2b_model(df: pd.DataFrame):
+    """Fit the preregistered H2b model robustly for smoke/synthetic runs.
+
+    Statsmodels' random-intercept MixedLM can raise a hard singular-matrix
+    error in small synthetic panels, especially when optional lookup covariates
+    are placeholders with no variation.  Keep the preregistered mixed model as
+    primary, remove constant nuisance terms, and fall back to a country-clustered
+    linear model rather than aborting the full pipeline smoke test.
+    """
+    import statsmodels.formula.api as smf
+
+    d = df.replace([np.inf, -np.inf], np.nan).dropna(
+        subset=["noninv", "dist_c", "focal", "T", "country"]).copy()
+    rhs = "dist_c * focal"
+    if d["T"].nunique(dropna=True) > 1:
+        rhs += " + T"
+    formula = f"noninv ~ {rhs}"
+
+    if (len(d) < 4 or d["country"].nunique() < 2 or
+            d["dist_c"].nunique(dropna=True) < 2 or
+            d["focal"].nunique(dropna=True) < 2):
+        return _NullH2BResult(), "unfit", "insufficient variation for H2b model"
+
+    try:
+        md = smf.mixedlm(formula, d, groups=d["country"]).fit(
+            reml=True, method="lbfgs")
+        return md, "mixedlm_random_intercept", None
+    except (np.linalg.LinAlgError, ValueError) as exc:
+        # In small smoke data the random-intercept Hessian/normal equations can
+        # be singular.  Country-clustered OLS preserves the same fixed-effect
+        # contrast and is adequate as an execution fallback.
+        try:
+            ols = smf.ols(formula, d).fit(
+                cov_type="cluster", cov_kwds={"groups": d["country"]})
+            return ols, "ols_country_cluster_fallback", str(exc)
+        except (np.linalg.LinAlgError, ValueError) as fallback_exc:
+            return (_NullH2BResult(), "unfit",
+                    f"mixedlm failed: {exc}; ols fallback failed: {fallback_exc}")
+
+
+class _NullH2BResult:
+    params = pd.Series(dtype=float)
+    pvalues = pd.Series(dtype=float)
+
+    def summary(self):
+        return "H2b model was not fit."
 
 
 def _median_split_sensitivity(df: pd.DataFrame) -> dict:

@@ -174,7 +174,12 @@ def psu_bootstrap(frame, res, B, seed) -> float:
             bb = np.linalg.solve(Cc[np.ix_(xi, xi)], Cc[xi, 0])
         except np.linalg.LinAlgError:
             continue
-        out.append(bb[1] * np.sqrt(Cc[xi, xi][1, 1]) / np.sqrt(Cc[0, 0]))
+        # ``Cc[xi, xi]`` uses NumPy advanced indexing and returns the
+        # diagonal as a 1-D array, so index the f predictor variance directly.
+        var_f = Cc[xi[1], xi[1]]
+        if Cc[0, 0] <= 0 or var_f < 0:
+            continue
+        out.append(bb[1] * np.sqrt(var_f) / np.sqrt(Cc[0, 0]))
     return float(np.std(out, ddof=1)) if len(out) > 3 else np.nan
 
 
