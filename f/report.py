@@ -81,6 +81,8 @@ def build_markdown(results: dict, smoke: bool, truth: dict | None = None) -> str
                  f"{_f(h2b['interaction_p'])}); distance source: "
                  f"{h2b['distance_source']}; translation covariate: "
                  f"{h2b['translation_source']}\n")
+        if h2b.get("model_kind"):
+            L.append(f"Model fit: {h2b['model_kind']}\n")
 
     h3 = results.get("h3")
     if h3:
