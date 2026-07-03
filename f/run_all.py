@@ -22,7 +22,8 @@ import pandas as pd
 from . import config as C
 from .data_io import (load_gfs, orient_items, normalize_weights,
                       validate_varmap, wave_frame, panel_frame,
-                      multiply_impute, n_cats_map, write_lookup_templates)
+                      multiply_impute, n_cats_map, write_lookup_templates,
+                      unique_stems)
 from .synthetic import simulate_panel
 from .h1_structure import run_h1
 from .h2_invariance import run_h2a, run_h2b, run_h2a_mc
@@ -129,8 +130,7 @@ def main(argv=None):
 
     # ---- Panel imputations (H3, H4) ----
     panel = panel_frame(long_df)
-    stems = [it.var for it in C.F_ITEMS + C.P_ITEMS] + \
-            [o["var"] for o in C.H3_OUTCOMES.values()]
+    stems = unique_stems()
     pcols = [f"{v}_w{t}" for v in stems for t in (1, 2, 3)
              if f"{v}_w{t}" in panel.columns]
     ncmap_panel = {f"{k}_w{t}": v for k, v in ncmap.items() for t in (1, 2, 3)}

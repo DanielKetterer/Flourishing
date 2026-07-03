@@ -21,6 +21,13 @@ import pandas as pd
 from . import config as C
 
 
+def unique_stems() -> list[str]:
+    """Ordered unique analysis variable stems across f, p, and outcomes."""
+    stems = [it.var for it in C.F_ITEMS + C.P_ITEMS] + [
+        o["var"] for o in C.H3_OUTCOMES.values()]
+    return list(dict.fromkeys(stems))
+
+
 # ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------
@@ -56,8 +63,7 @@ def load_gfs(data_dir: str, waves=(1, 2, 3), file_pattern="gfs_wave{w}.csv"
 
 def _wide_to_long(df: pd.DataFrame, waves) -> pd.DataFrame:
     out = []
-    stems = [it.var for it in C.F_ITEMS + C.P_ITEMS] + \
-            [o["var"] for o in C.H3_OUTCOMES.values()]
+    stems = unique_stems()
     for w in waves:
         suf = C.WIDE_SUFFIX.format(wave=w)
         cols = {s + suf: s for s in stems if s + suf in df.columns}
@@ -139,8 +145,7 @@ def panel_frame(long_df: pd.DataFrame, waves=(1, 2, 3)) -> pd.DataFrame:
     """Wide panel of respondents observed at all requested waves; item and
     outcome columns suffixed _w{t}; W1 admin/demographics carried."""
     idc, wc = C.ADMIN["id"], C.ADMIN["wave"]
-    stems = [it.var for it in C.F_ITEMS + C.P_ITEMS] + \
-            [o["var"] for o in C.H3_OUTCOMES.values()]
+    stems = unique_stems()
     stems = [s for s in stems if s in long_df.columns]
     base = wave_frame(long_df, waves[0])
     admin = [idc, C.ADMIN["country"], C.ADMIN["weight"], C.ADMIN["strata"],
@@ -171,7 +176,7 @@ def multiply_impute(df: pd.DataFrame, cols: list[str], m: int,
     """
     from sklearn.experimental import enable_iterative_imputer  # noqa: F401
     from sklearn.impute import IterativeImputer
-    cols = [c for c in cols if c in df.columns]
+    cols = [c for c in dict.fromkeys(cols) if c in df.columns]
     aux = [C.ADMIN["weight"]] + [v for v in C.H3_CONTROLS.values()
                                  if v in df.columns]
     use = cols + [a for a in aux if a not in cols]
