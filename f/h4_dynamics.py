@@ -44,6 +44,7 @@ from sklearn.isotonic import IsotonicRegression
 
 from . import config as C
 from . import cfa
+from .data_io import rubin_pool
 from .synthetic import simulate_items_fast
 
 RNG = np.random.default_rng
@@ -363,13 +364,16 @@ def _channel_fits(Bs, S0, lam_anchor, om=None):
                 d=(fitL - fitM) / denom)
 
 
-def run_h4a(mom, B, lam_anchor, mu_hat, om, seed, smoke=False,
+def run_h4a(obs: dict, n_panel: int, lam_anchor, mu_hat, seed, smoke=False,
             r2_stage1=np.nan) -> dict:
+    """Calibrated cross-fitting. obs holds the (MI-pooled) observed decision
+    statistics: d, phi_hat, tau_hat, fitL, fitM. The verdict consumes BOTH
+    decision statistics (Delta_fit, kappa) per the prereg: kappa below the
+    config floor (Stage 2 addendum item vii locks it) means the two truths
+    are not separable at this design and the verdict is Indistinguishable."""
     cfg = C.H4
     nsim = C.SMOKE["h4a_nsim"] if smoke else cfg["h4a_nsim"]
-    Nsim = min(mom["n"], C.SMOKE["h4_mc_n"] if smoke else cfg["mc_n"])
-    Bs = (B + B.T) / 2
-    obs = _channel_fits(Bs, mom["S0"], lam_anchor, om)
+    Nsim = min(n_panel, C.SMOKE["h4_mc_n"] if smoke else cfg["mc_n"])
     dL, dM = [], []
     for r in range(nsim):
         XL = simulate_items_fast(Nsim, 1.0, mu_hat, obs["phi_hat"],
@@ -387,7 +391,14 @@ def run_h4a(mom, B, lam_anchor, mu_hat, om, seed, smoke=False,
     tL = float(np.quantile(dL, 1 - a))    # reject Latent if d_obs > tL
     tM = float(np.quantile(dM, a))        # reject Mutualism if d_obs < tM
     rejL, rejM = obs["d"] > tL, obs["d"] < tM
-    if not np.isnan(r2_stage1) and r2_stage1 < C.H4["tier1_r2"]:
+    lo, hi = min(dL.min(), dM.min()), max(dL.max(), dM.max())
+    bins = np.linspace(lo, hi, 25)
+    hL, _ = np.histogram(dL, bins, density=True)
+    hM, _ = np.histogram(dM, bins, density=True)
+    kappa = float(1 - np.sum(np.minimum(hL, hM)) * np.diff(bins)[0])
+    if kappa < cfg["h4a_kappa_min"]:
+        verdict = "Indistinguishable"     # kappa gate (Stage 2 locks value)
+    elif not np.isnan(r2_stage1) and r2_stage1 < cfg["tier1_r2"]:
         verdict = "Indistinguishable"     # R2_min gate (Stage 2 locks value)
     elif rejM and not rejL:
         verdict = "Latent"
@@ -395,46 +406,139 @@ def run_h4a(mom, B, lam_anchor, mu_hat, om, seed, smoke=False,
         verdict = "Mutualism"
     else:
         verdict = "Indistinguishable"
-    lo, hi = min(dL.min(), dM.min()), max(dL.max(), dM.max())
-    bins = np.linspace(lo, hi, 25)
-    hL, _ = np.histogram(dL, bins, density=True)
-    hM, _ = np.histogram(dM, bins, density=True)
-    kappa = float(1 - np.sum(np.minimum(hL, hM)) * np.diff(bins)[0])
     return dict(verdict=verdict, d_obs=float(obs["d"]), thresholds=(tM, tL),
-                kappa=kappa, dist_L=dL, dist_M=dM,
+                kappa=kappa, kappa_min=cfg["h4a_kappa_min"],
+                dist_L=dL, dist_M=dM,
                 phi_hat=obs["phi_hat"], tau_hat=obs["tau_hat"],
                 fitL=obs["fitL"], fitM=obs["fitM"])
 
 
-def confusion_matrix(map_seed, lam_anchor, tM, tL, mu_hat, seed,
-                     smoke=False) -> pd.DataFrame:
+def confusion_matrix(lam_anchor, tM, tL, seed, smoke=False) -> pd.DataFrame:
+    """P(verdict | truth) across the pre-registered w_L x mu_ratio grid
+    (Stage 2 addendum item vii), not just the w_L margin."""
     cfg = C.H4
     ng = C.SMOKE["h4_wgrid_n"] if smoke else 5
     reps = C.SMOKE["h4_mc_reps"] if smoke else 10
     Nmc = C.SMOKE["h4_mc_n"] if smoke else cfg["mc_n"]
+    mus = C.SMOKE["h4_mu_grid"] if smoke else cfg["mu_grid"]
     rows = []
-    for wt in np.linspace(0, 1, ng):
-        counts = dict(Latent=0, Mutualism=0, Indistinguishable=0)
-        for r in range(reps):
-            X = simulate_items_fast(Nmc, wt, mu_hat, cfg["phi_midus"],
-                                    cfg["tau_midus"], seed=seed + r + int(wt * 999))
-            S0, S1, S2 = _sim_moments(X)
-            B, _ = b_obs_from(S0, S1, S2)
-            d = _channel_fits((B + B.T) / 2, S0, lam_anchor)["d"]
-            if d < tM:
-                counts["Latent"] += 1
-            elif d > tL:
-                counts["Mutualism"] += 1
-            else:
-                counts["Indistinguishable"] += 1
-        rows.append(dict(w_true=float(wt),
-                         **{k: v / reps for k, v in counts.items()}))
+    for mu in mus:
+        for wt in np.linspace(0, 1, ng):
+            counts = dict(Latent=0, Mutualism=0, Indistinguishable=0)
+            for r in range(reps):
+                X = simulate_items_fast(Nmc, wt, mu, cfg["phi_midus"],
+                                        cfg["tau_midus"],
+                                        seed=seed + r + int(wt * 999)
+                                        + int(mu * 7717))
+                S0, S1, S2 = _sim_moments(X)
+                B, _ = b_obs_from(S0, S1, S2)
+                d = _channel_fits((B + B.T) / 2, S0, lam_anchor)["d"]
+                if d < tM:
+                    counts["Latent"] += 1
+                elif d > tL:
+                    counts["Mutualism"] += 1
+                else:
+                    counts["Indistinguishable"] += 1
+            rows.append(dict(w_true=float(wt), mu_ratio=float(mu),
+                             **{k: v / reps for k, v in counts.items()}))
     return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------
 # Cross-checks
 # ---------------------------------------------------------------------------
+
+def f_wave_scores(panel: pd.DataFrame, h1_fit) -> np.ndarray:
+    """Bartlett f scores at each wave under the pooled W1 loadings and W1
+    standardization (wave-invariant scoring rule, as in H3)."""
+    cols1 = [f"{v}_w1" for v in FN]
+    X1 = panel[cols1].to_numpy(float)
+    mu1 = np.nanmean(X1, 0)
+    sd1 = np.nanstd(X1, 0)
+    out = []
+    for wv in (1, 2, 3):
+        X = panel[[f"{v}_w{wv}" for v in FN]].to_numpy(float)
+        Z = np.nan_to_num((X - mu1) / np.where(sd1 > 0, sd1, 1))
+        fs, _ = cfa.bartlett(h1_fit, Z)
+        out.append(fs[:, 0])
+    return np.column_stack(out)
+
+
+def ri_ar1_f(panel: pd.DataFrame, h1_fit) -> dict:
+    """Univariate random-intercept AR(1) on the 3-wave f scores: the RI-CLPM
+    cross-check named in the prereg's H4 list (the bivariate per-outcome
+    RI-CLPM lives in H3). Separates the trait (random-intercept) variance
+    share from the within-person lag-1 persistence of f."""
+    from scipy.optimize import minimize
+    F = f_wave_scores(panel, h1_fit)
+    w = panel[C.ADMIN["weight"]].to_numpy(float)
+    m = ~np.isnan(F).any(1)
+    Z, ww = F[m], w[m]
+    mu_s = np.average(Z, 0, weights=ww)
+    S = np.cov(Z, rowvar=False, aweights=ww)
+
+    def build(th):
+        vI, v1, a, ve = np.exp(th[0]), np.exp(th[1]), th[2], np.exp(th[3])
+        W = {1: v1}
+        W[2] = a * a * W[1] + ve
+        W[3] = a * a * W[2] + ve
+        Sig = np.full((3, 3), vI)
+        for t in range(3):
+            for s in range(3):
+                if t == s:
+                    Sig[t, s] += W[t + 1]
+                elif t > s:
+                    Sig[t, s] += a ** (t - s) * W[s + 1]
+                else:
+                    Sig[t, s] += a ** (s - t) * W[t + 1]
+        return Sig
+
+    def nll(th):
+        Sig = build(th)
+        sgn, ld = np.linalg.slogdet(Sig)
+        if sgn <= 0:
+            return 1e9
+        return float(ld + np.sum(np.linalg.inv(Sig) * S))
+
+    res = minimize(nll, np.array([np.log(0.3), np.log(0.5), 0.5, np.log(0.3)]),
+                   method="L-BFGS-B",
+                   bounds=[(-6, 3), (-6, 3), (-0.99, 0.99), (-6, 3)],
+                   options=dict(maxiter=2000))
+    vI, v1 = float(np.exp(res.x[0])), float(np.exp(res.x[1]))
+    return dict(a_within=float(res.x[2]),
+                ri_variance_share=vI / (vI + v1),
+                converged=bool(res.success), n=int(m.sum()))
+
+
+def _pool_preflight(pf_list: list[dict]) -> dict:
+    """Rubin-style pooling of the pre-flight diagnostics: band checks are
+    re-evaluated on the imputation-mean statistic; per-imputation pass
+    fraction reported alongside."""
+    bands = C.H4["preflight"]
+    names = ["trace", "diag_range", "spectral_radius", "homogeneity",
+             "collider"]
+    checks = {}
+    for nm in names:
+        vals = [pf["checks"][nm][1] for pf in pf_list]
+        if nm == "diag_range":
+            v = (float(np.mean([x[0] for x in vals])),
+                 float(np.mean([x[1] for x in vals])))
+            ok = bands["diag_range"][0] <= v[0] and v[1] <= bands["diag_range"][1]
+        else:
+            v = float(np.mean(vals))
+            if nm == "trace":
+                ok = bands["trace_frac"][0] <= v <= bands["trace_frac"][1]
+            elif nm == "spectral_radius":
+                ok = v < bands["spectral_radius_max"]
+            elif nm == "homogeneity":
+                ok = v < bands["homogeneity_max"]
+            else:
+                ok = v < bands["collider_flip_max"]
+        checks[nm] = (bool(ok), v)
+    return dict(all_pass=all(v[0] for v in checks.values()), checks=checks,
+                pass_fraction=float(np.mean([pf["all_pass"]
+                                             for pf in pf_list])))
+
 
 def naive_demeaned_lag1(mom) -> dict:
     Xc = [mom["Xc"][t][mom["mask"]] for t in (1, 2, 3)]
@@ -508,56 +612,90 @@ def elasticnet_gmm(mom, lam_anchor) -> dict:
 # Driver
 # ---------------------------------------------------------------------------
 
-def run_h4(panel: pd.DataFrame, h1_fit, seed: int, smoke: bool = False,
+def run_h4(imputed_panels, h1_fit, seed: int, smoke: bool = False,
            lam_anchor: np.ndarray | None = None) -> dict:
+    """H4 across the full MI set (prereg, Missing Data: the panel
+    auto-covariance matrices are estimated per imputation and pooled by
+    Rubin's rules). The Stage 2 correction map and the H4a calibration
+    simulations are data-independent given the anchors and run once; every
+    data-dependent statistic is computed per imputation and pooled. The
+    heavier cross-checks and the reported bootstrap distributions use
+    imputation 1 (documented)."""
     cfg = C.H4
+    if isinstance(imputed_panels, pd.DataFrame):
+        imputed_panels = [imputed_panels]
+    m_imp = len(imputed_panels)
     nboot = C.SMOKE["n_boot"] if smoke else cfg["n_boot"]
     if lam_anchor is None:
         # ANCHOR NOTE: registered anchor direction is the MIDUS Lambda mapped
         # onto the GFS indicator set, fixed in the Stage 2 addendum; until
         # that file is supplied the H1 pooled f-loading direction stands in.
         lam_anchor = h1_fit.loading_vector("f")
-    mom = panel_moments(panel)
-    B, tik = b_obs_from(mom["S0"], mom["S1"], mom["S2"])
-    Bs = (B + B.T) / 2
-    sk = s_skew(B)
-    use_sym = sk > cfg["s_skew_max"]
-    pf = preflight(B, mom)
-    boot = wild_cluster_bootstrap(mom, lam_anchor, nboot, seed)
-    om = 1.0 / np.maximum(_off(boot["entry_var"]), 1e-10)
-    om = om / om.mean()
     BL = anchor_latent(lam_anchor)
-    BM = anchor_mutualism(mom["S0"])
     BT = np.eye(len(FN))
-    mix = stage1_mixture(Bs, BL, BM, om, BT=BT)
-    # sparse-J variant
-    from sklearn.covariance import GraphicalLassoCV
-    sd = mom["Xc"][1][mom["mask"]].std(0)
-    Z1 = mom["Xc"][1][mom["mask"]] / np.where(sd > 0, sd, 1)
-    K_sparse = GraphicalLassoCV(cv=3).fit(Z1).precision_
-    Dsd = np.diag(sd)
-    K_sparse_cov = np.linalg.inv(Dsd) @ K_sparse @ np.linalg.inv(Dsd)
-    BM_sparse = anchor_mutualism(mom["S0"], K=K_sparse_cov)
-    mix_sparse = stage1_mixture(Bs, BL, BM_sparse, om)
-    sparsity_gap = abs(mix["w"] - mix_sparse["w"])
-
-    mu_hat = mu_hat_from(mom["S0"], mom["S1"], B)
     map_out = stage2_map(lam_anchor, seed + 11, smoke=smoke)
-    inv = invert_map(map_out, mix["w_raw"], mu_hat)
-    boot_corr = np.array([invert_map(map_out, wb, mu_hat)["w_corrected"]
-                          for wb in boot["w_raw_boot"]])
-    lo, hi = np.percentile(boot_corr, [2.5, 97.5])
-    half = (hi - lo) / 2 * cfg["c_inflate"]
-    ci = (max(inv["w_corrected"] - half, 0.0),
-          min(inv["w_corrected"] + half, 1.0))
-    ci_width = float(ci[1] - ci[0])
 
-    corner = inv["w_corrected"] >= cfg["corner_interval"][0]
-    if inv["clipping"]:
-        interval = (0.0, float(np.interp(C.H4["clip_slope_min"],
-                                         [0, 1], [0, 1]) or 0.25))
-        partial_id = ("clipping_zone", (0.0, float(max(inv["w_corrected"],
-                                                       0.25))))
+    from sklearn.covariance import GraphicalLassoCV
+    per, pf_list = [], []
+    mom1 = None
+    for k, panel in enumerate(imputed_panels):
+        mom = panel_moments(panel)
+        if k == 0:
+            mom1 = mom
+        B, tik = b_obs_from(mom["S0"], mom["S1"], mom["S2"])
+        Bs = (B + B.T) / 2
+        pf_list.append(preflight(B, mom))
+        boot = wild_cluster_bootstrap(mom, lam_anchor, nboot, seed + 17 * k)
+        om = 1.0 / np.maximum(_off(boot["entry_var"]), 1e-10)
+        om = om / om.mean()
+        BM = anchor_mutualism(mom["S0"])
+        mix = stage1_mixture(Bs, BL, BM, om, BT=BT)
+        # sparse-J variant
+        sd = mom["Xc"][1][mom["mask"]].std(0)
+        Z1 = mom["Xc"][1][mom["mask"]] / np.where(sd > 0, sd, 1)
+        K_sparse = GraphicalLassoCV(cv=3).fit(Z1).precision_
+        Dsd = np.diag(sd)
+        K_sparse_cov = np.linalg.inv(Dsd) @ K_sparse @ np.linalg.inv(Dsd)
+        mix_sparse = stage1_mixture(Bs, BL,
+                                    anchor_mutualism(mom["S0"],
+                                                     K=K_sparse_cov), om)
+        mu_hat = mu_hat_from(mom["S0"], mom["S1"], B)
+        inv = invert_map(map_out, mix["w_raw"], mu_hat)
+        boot_corr = np.array([invert_map(map_out, wb, mu_hat)["w_corrected"]
+                              for wb in boot["w_raw_boot"]])
+        per.append(dict(B=B, Bs=Bs, tik=tik, sk=s_skew(B), mix=mix,
+                        sparse_w=mix_sparse["w"],
+                        sparsity_gap=abs(mix["w"] - mix_sparse["w"]),
+                        mu_hat=mu_hat, inv=inv, boot=boot,
+                        boot_corr=boot_corr,
+                        obs_cf=_channel_fits(Bs, mom["S0"], lam_anchor, om)))
+
+    # ---- Rubin pooling of the headline statistics ----
+    pool_w = rubin_pool([p["inv"]["w_corrected"] for p in per])
+    w_corrected = pool_w["point"]
+    W_within = float(np.mean([np.var(p["boot_corr"], ddof=1)
+                              if p["boot_corr"].size > 1 else 0.0
+                              for p in per]))
+    T_var = W_within + (1 + 1 / m_imp) * pool_w["between_var"]
+    half = 1.96 * np.sqrt(T_var) * cfg["c_inflate"]
+    ci = (max(w_corrected - half, 0.0), min(w_corrected + half, 1.0))
+    ci_width = float(ci[1] - ci[0])
+    w_raw_pool = float(np.mean([p["mix"]["w_raw"] for p in per]))
+    mu_hat_pool = float(np.mean([p["mu_hat"] for p in per]))
+    r2_pool = float(np.mean([p["mix"]["r2_offdiag"] for p in per]))
+    sparsity_gap = float(np.mean([p["sparsity_gap"] for p in per]))
+    sk_pool = float(np.mean([p["sk"] for p in per]))
+    use_sym = sk_pool > cfg["s_skew_max"]
+    pf = _pool_preflight(pf_list)
+    inv_pooled = invert_map(map_out, w_raw_pool, mu_hat_pool)
+    ta = [p["mix"].get("three_anchor") for p in per
+          if p["mix"].get("three_anchor")]
+    three_anchor = ({k: float(np.mean([t[k] for t in ta]))
+                     for k in ("w_L", "w_M", "w_T")} if ta else None)
+
+    corner = w_corrected >= cfg["corner_interval"][0]
+    if inv_pooled["clipping"]:
+        partial_id = ("clipping_zone", (0.0, float(max(w_corrected, 0.25))))
     elif corner:
         partial_id = ("high_wL_high_tau_corner", cfg["corner_interval"])
     else:
@@ -567,35 +705,57 @@ def run_h4(panel: pd.DataFrame, h1_fit, seed: int, smoke: bool = False,
         tier = "partial_identification"
     else:
         checks = [ci_width < cfg["tier1_ci_width"],
-                  mix["r2_offdiag"] > cfg["tier1_r2"],
+                  r2_pool > cfg["tier1_r2"],
                   pf["all_pass"], sparsity_gap < cfg["sparsity_gap_max"],
-                  sk < cfg["s_skew_max"]]
+                  sk_pool < cfg["s_skew_max"]]
         tier = 1 if all(checks) else (2 if sum(checks) >= 3 else 3)
 
-    h4a = run_h4a(mom, B, lam_anchor, mu_hat, om, seed + 33, smoke=smoke,
-                  r2_stage1=mix["r2_offdiag"])
-    conf = confusion_matrix(map_out, lam_anchor, h4a["thresholds"][0],
-                            h4a["thresholds"][1], mu_hat, seed + 44,
-                            smoke=smoke)
-    person_boot = person_cluster_bootstrap(mom, lam_anchor,
+    obs_pool = dict(
+        d=float(np.mean([p["obs_cf"]["d"] for p in per])),
+        phi_hat=float(np.mean([p["obs_cf"]["phi_hat"] for p in per])),
+        tau_hat=float(np.mean([p["obs_cf"]["tau_hat"] for p in per])),
+        fitL=float(np.mean([p["obs_cf"]["fitL"] for p in per])),
+        fitM=float(np.mean([p["obs_cf"]["fitM"] for p in per])))
+    h4a = run_h4a(obs_pool, mom1["n"], lam_anchor, mu_hat_pool, seed + 33,
+                  smoke=smoke, r2_stage1=r2_pool)
+    conf = confusion_matrix(lam_anchor, h4a["thresholds"][0],
+                            h4a["thresholds"][1], seed + 44, smoke=smoke)
+    # cross-checks on imputation 1 (documented)
+    person_boot = person_cluster_bootstrap(mom1, lam_anchor,
                                            max(nboot // 3, 20), seed + 55)
-    checks_x = dict(naive=naive_demeaned_lag1(mom),
-                    separability=separability_test(panel, h1_fit, mom),
-                    elasticnet=elasticnet_gmm(mom, lam_anchor))
+    checks_x = dict(naive=naive_demeaned_lag1(mom1),
+                    separability=separability_test(imputed_panels[0], h1_fit,
+                                                   mom1),
+                    elasticnet=elasticnet_gmm(mom1, lam_anchor),
+                    ri_ar1=ri_ar1_f(imputed_panels[0], h1_fit))
 
-    dirl = directional_commitment(h4a["verdict"], tier, inv["w_corrected"],
+    dirl = directional_commitment(h4a["verdict"], tier, w_corrected,
                                   partial_id)
-    return dict(B_obs=B, B_sym=Bs, s_skew=sk, symmetrized_fallback=use_sym,
-                tikhonov=tik, preflight=pf, anchors=dict(BL=BL, BM=BM),
-                stage1=mix, sparse=dict(w=mix_sparse["w"], gap=sparsity_gap),
-                mu_hat=mu_hat, map=map_out, inversion=inv,
-                w_corrected=inv["w_corrected"], ci=ci, ci_width=ci_width,
+    p1 = per[0]
+    return dict(B_obs=p1["B"], B_sym=p1["Bs"], s_skew=sk_pool,
+                symmetrized_fallback=use_sym,
+                tikhonov=p1["tik"], preflight=pf,
+                anchors=dict(BL=BL, BM=anchor_mutualism(mom1["S0"])),
+                stage1=dict(w_raw=w_raw_pool,
+                            w=float(np.mean([p["mix"]["w"] for p in per])),
+                            r2_offdiag=r2_pool,
+                            clipped=bool(inv_pooled["clipping"]),
+                            three_anchor=three_anchor),
+                sparse=dict(w=float(np.mean([p["sparse_w"] for p in per])),
+                            gap=sparsity_gap),
+                mu_hat=mu_hat_pool, map=map_out, inversion=inv_pooled,
+                w_corrected=w_corrected, ci=ci, ci_width=ci_width,
+                mi=dict(m=m_imp, between_var=pool_w["between_var"],
+                        within_var=W_within,
+                        per_imputation_w=[p["inv"]["w_corrected"]
+                                          for p in per]),
                 partial_identification=partial_id, tier=tier,
                 h4a=h4a, confusion=conf,
-                boot=dict(w_raw=boot["w_raw_boot"], w_corr=boot_corr,
+                boot=dict(w_raw=p1["boot"]["w_raw_boot"],
+                          w_corr=p1["boot_corr"],
                           person_w_raw=person_boot),
                 cross_checks=checks_x, directional=dirl,
-                n_panel=mom["n"])
+                n_panel=mom1["n"])
 
 
 def directional_commitment(h4a_verdict: str, tier, w_corr: float,

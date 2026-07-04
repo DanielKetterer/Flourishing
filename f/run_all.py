@@ -112,7 +112,7 @@ def main(argv=None):
 
     if "h2" not in args.skip and "h1" in results:
         print("[run_all] H2a alignment block ...")
-        results["h2a"] = run_h2a(imputed_w1[0], results["h1"]["fits"][0],
+        results["h2a"] = run_h2a(imputed_w1, results["h1"]["fits"],
                                  seed, smoke=smoke,
                                  min_n=150 if smoke else None,
                                  lookups_dir=lookups)
@@ -125,7 +125,7 @@ def main(argv=None):
         print("[run_all] H2a Monte Carlo operating characteristics ...")
         results["h2a_mc"] = run_h2a_mc(
             seed, smoke=smoke,
-            n_per_country=250 if smoke else 500,
+            n_per_country=250 if smoke else C.H2["mc_n_per_country"],
             n_countries=8 if smoke else len(C.GFS_COUNTRIES))
 
     # ---- Panel imputations (H3, H4) ----
@@ -141,16 +141,23 @@ def main(argv=None):
 
     if "h3" not in args.skip:
         print("[run_all] H3 predictive block ...")
-        results["h3"] = run_h3(imputed_panels, seed, smoke=smoke)
-        print(f"          H3 verdict: {results['h3']['verdict']}")
+        h2a_tier = results.get("h2a", {}).get("tier")
+        results["h3"] = run_h3(imputed_panels, seed, smoke=smoke,
+                               h2a_tier=h2a_tier)
+        print(f"          H3 verdict: {results['h3']['verdict']} "
+              f"(headline: {results['h3']['headline']})")
 
     if "h4" not in args.skip and "h1" in results:
         print("[run_all] H4 dynamics block ...")
-        results["h4"] = run_h4(imputed_panels[0], results["h1"]["fits"][0],
+        results["h4"] = run_h4(imputed_panels, results["h1"]["fits"][0],
                                seed, smoke=smoke)
         print(f"          H4 w_corrected = {results['h4']['w_corrected']:.3f}"
               f" (tier {results['h4']['tier']}), H4a: "
               f"{results['h4']['h4a']['verdict']}")
+
+    # joint-configuration hard rule (prereg Inference Criteria)
+    results["package"] = report.joint_configuration(results)
+    print(f"[run_all] package: {results['package']['package_verdict']}")
 
     # ---- outputs ----
     print("[run_all] figures ...")

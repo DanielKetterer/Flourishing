@@ -31,6 +31,7 @@ from scipy.stats import spearmanr
 
 from . import config as C
 from . import cfa
+from .data_io import rubin_pool
 from .polychoric import polychoric_matrix, pearson_corr_weighted, nearest_pd_corr
 
 RNG = np.random.default_rng
@@ -145,21 +146,17 @@ def flag_noninvariance(al: dict, cfg=C.H2) -> tuple[np.ndarray, float]:
 # H2a driver
 # ---------------------------------------------------------------------------
 
-def run_h2a(df_w1: pd.DataFrame, pooled_fit: cfa.FitResult, seed: int,
-            smoke: bool = False, min_n: int | None = None,
-            lookups_dir: str | None = None) -> dict:
+def _align_one_imputation(cinp: dict, countries: list[str],
+                          pooled_fit: cfa.FitResult, df_w1: pd.DataFrame,
+                          mu_p, sd_p, seed: int) -> dict:
+    """Per-factor + marginal alignment and the trustworthiness statistics for
+    one imputed dataset."""
     cfg = C.H2
-    min_n = min_n if min_n is not None else cfg["min_country_n"]
-    cinp, (mu_p, sd_p) = country_inputs(df_w1, min_n)
-    countries = sorted(cinp)
-    if len(countries) < 3:
-        return dict(error=f"only {len(countries)} countries reach n >= {min_n}")
-    cfits = configural_fits(cinp, seed)
     part = C.f_partition()
     names = [it.var for it in C.F_ITEMS]
     Ns = np.array([cinp[c]["N"] for c in countries])
+    cfits = configural_fits({c: cinp[c] for c in countries}, seed)
 
-    # per-factor alignment: f over all items; each group factor over its items
     factor_sets = {"f": names}
     for d in C.DOMAINS:
         factor_sets[d] = part[d]
@@ -171,8 +168,7 @@ def run_h2a(df_w1: pd.DataFrame, pooled_fit: cfa.FitResult, seed: int,
         nu = np.array([[cinp[c]["means"][j] for j in jidx] for c in countries])
         al = align_factor(lam, nu, Ns, cfg["alignment_eps"],
                           seed=seed + hash(fac) % 1000)
-        flags, frac = flag_noninvariance(al)
-        al.update(flags=flags, flag_frac=frac, items=its)
+        al["items"] = its
         align_out[fac] = al
 
     # marginal alignment sensitivity: one-factor model per country
@@ -188,41 +184,197 @@ def run_h2a(df_w1: pd.DataFrame, pooled_fit: cfa.FitResult, seed: int,
     al_marg = align_factor(np.array(lam_m), nu_all, Ns, cfg["alignment_eps"],
                            seed=seed + 7)
 
-    # trustworthiness criteria on the f alignment
-    alf = align_out["f"]
-    r2_avg = float(np.nanmean([alf["r2_loading"], alf["r2_intercept"]]))
     # configural country-level f means: Bartlett scores under pooled loadings
-    Zc, conf_means = [], []
-    A_err = None
+    conf_means = []
     for c in countries:
         d = df_w1[df_w1[C.ADMIN["country"]] == c]
         X = (d[names].to_numpy(float) - mu_p) / sd_p
         m = ~np.isnan(X).any(1)
-        fs, A_err = cfa.bartlett(pooled_fit, X[m])
+        fs, _ = cfa.bartlett(pooled_fit, X[m])
         wsub = d[C.ADMIN["weight"]].to_numpy(float)[m]
         conf_means.append(np.average(fs[:, 0], weights=wsub))
+
+    alf = align_out["f"]
+    r2_avg = float(np.nanmean([alf["r2_loading"], alf["r2_intercept"]]))
     rank_r = float(spearmanr(alf["alpha"], conf_means).statistic)
+    return dict(align=align_out, marginal=al_marg,
+                conf_means=np.array(conf_means, float),
+                r2_avg=r2_avg, rank_corr=rank_r)
+
+
+def _pool_alignment(per_imp: list[dict], countries: list[str]) -> dict:
+    """Average the aligned parameter matrices across imputations (they share
+    the FIXED identification, so the metric is common) -- the MI-pooled
+    alignment solution used for flags and H2b."""
+    facs = list(per_imp[0]["align"])
+    pooled = {}
+    for fac in facs:
+        als = [pi["align"][fac] for pi in per_imp]
+        pooled[fac] = dict(
+            items=als[0]["items"],
+            lam_aligned=np.mean([a["lam_aligned"] for a in als], 0),
+            nu_aligned=np.mean([a["nu_aligned"] for a in als], 0),
+            lam_inv=np.mean([a["lam_inv"] for a in als], 0),
+            nu_inv=np.mean([a["nu_inv"] for a in als], 0),
+            alpha=np.mean([a["alpha"] for a in als], 0),
+            psi=np.mean([a["psi"] for a in als], 0),
+            r2_loading=float(np.nanmean([a["r2_loading"] for a in als])),
+            r2_intercept=float(np.nanmean([a["r2_intercept"] for a in als])),
+            loss=float(np.mean([a["loss"] for a in als])),
+            converged=all(a["converged"] for a in als),
+        )
+    return pooled
+
+
+def run_h2a(imputed_w1, pooled_fits, seed: int,
+            smoke: bool = False, min_n: int | None = None,
+            lookups_dir: str | None = None) -> dict:
+    """H2a across the full MI set (prereg, Missing Data: MI for all models
+    under the primary WLSMV regime, pooled by Rubin's rules). Accepts a list
+    of imputed Wave-1 frames with matching per-imputation H1 fits; a single
+    frame/fit is wrapped for backward compatibility."""
+    cfg = C.H2
+    if isinstance(imputed_w1, pd.DataFrame):
+        imputed_w1 = [imputed_w1]
+    if not isinstance(pooled_fits, (list, tuple)):
+        pooled_fits = [pooled_fits] * len(imputed_w1)
+    min_n = min_n if min_n is not None else cfg["min_country_n"]
+
+    # country inputs per imputation; retained set = intersection across
+    # imputations (stable in practice: imputation removes item missingness)
+    cinp_list, mu_sd = [], []
+    countries = None
+    for d1 in imputed_w1:
+        cinp, ms = country_inputs(d1, min_n)
+        cinp_list.append(cinp)
+        mu_sd.append(ms)
+        cs = sorted(cinp)
+        countries = cs if countries is None else [c for c in countries
+                                                  if c in cs]
+    if countries is None or len(countries) < 3:
+        return dict(error=f"fewer than 3 countries reach n >= {min_n}")
+
+    per_imp = []
+    for k, d1 in enumerate(imputed_w1):
+        per_imp.append(_align_one_imputation(
+            cinp_list[k], countries, pooled_fits[k], d1,
+            mu_sd[k][0], mu_sd[k][1], seed + 13 * k))
+
+    # MI-pooled alignment + trustworthiness criteria (Rubin points)
+    align_out = _pool_alignment(per_imp, countries)
+    alf = align_out["f"]
+    for fac in align_out:
+        flags, frac = flag_noninvariance(align_out[fac])
+        align_out[fac].update(flags=flags, flag_frac=frac)
+    r2_pool = rubin_pool([pi["r2_avg"] for pi in per_imp])
+    rank_pool = rubin_pool([pi["rank_corr"] for pi in per_imp])
+    conf_means = np.mean([pi["conf_means"] for pi in per_imp], 0)
+    r2_avg, rank_r = r2_pool["point"], rank_pool["point"]
     crit = dict(r2=r2_avg > cfg["alignment_r2_min"],
                 flags=alf["flag_frac"] <= cfg["noninv_max_frac"],
                 rank=rank_r >= cfg["rank_corr_min"])
     tier = 4 - sum(crit.values()) if sum(crit.values()) < 3 else 1
 
-    # sequential MGCFA sensitivity (continuous approximation, Chen 2007)
-    mg = mgcfa_sequence(cinp, countries, seed)
+    # marginal-alignment sensitivity, imputation-averaged scalars
+    marg = dict(
+        r2_loading=float(np.nanmean([pi["marginal"]["r2_loading"]
+                                     for pi in per_imp])),
+        r2_intercept=float(np.nanmean([pi["marginal"]["r2_intercept"]
+                                       for pi in per_imp])),
+        converged=all(pi["marginal"]["converged"] for pi in per_imp))
 
-    # stratified descriptives from lookups (if supplied)
-    strata_report = stratified_means(countries, alf["alpha"], lookups_dir)
+    # sequential MGCFA sensitivity (continuous approximation, Chen 2007),
+    # pooled across imputations; the partial-scalar search runs on
+    # imputation 1 (documented cost bound)
+    mg_list = [mgcfa_sequence(cinp_list[k], countries, seed,
+                              partial=(k == 0)) for k in range(len(per_imp))]
+    mg = mg_list[0]
+    for level in ("configural", "metric", "scalar"):
+        for stat in ("cfi", "rmsea"):
+            mg[level][stat] = rubin_pool(
+                [m_[level][stat] for m_ in mg_list])["point"]
+    for hi, lo in (("metric", "configural"), ("scalar", "metric")):
+        mg[hi]["dcfi"] = float(mg[hi]["cfi"] - mg[lo]["cfi"])
+        mg[hi]["drmsea"] = float(mg[hi]["rmsea"] - mg[lo]["rmsea"])
+        mg[hi]["pass_chen"] = _chen_pass(mg[hi]["cfi"], mg[hi]["rmsea"],
+                                         mg[lo]["cfi"], mg[lo]["rmsea"])
 
+    # stratum-level analyses on the common configural-score metric, INCLUDING
+    # countries below min_n (prereg: pooled into stratum-level analyses only)
+    all_means, all_Ns = {}, {}
+    for k, d1 in enumerate(imputed_w1):
+        mk, nk = all_country_score_means(d1, pooled_fits[k],
+                                         mu_sd[k][0], mu_sd[k][1])
+        for c in mk:
+            all_means.setdefault(c, []).append(mk[c])
+            all_Ns[c] = nk[c]
+    all_means = {c: float(np.mean(v)) for c, v in all_means.items()}
+    strata_report = stratified_means(all_means, all_Ns, countries,
+                                     lookups_dir)
+
+    cinp0 = cinp_list[0]
     return dict(countries=countries, tier=int(tier), criteria=crit,
                 r2_avg=r2_avg, flag_frac=alf["flag_frac"], rank_corr=rank_r,
-                alignment=align_out, marginal=al_marg,
+                r2_between_var=r2_pool["between_var"],
+                rank_between_var=rank_pool["between_var"],
+                m_imputations=len(per_imp),
+                alignment=align_out, marginal=marg,
                 configural_means=dict(zip(countries, map(float, conf_means))),
                 aligned_means=dict(zip(countries, map(float, alf["alpha"]))),
                 mgcfa=mg, strata=strata_report, n_by_country=dict(
-                    zip(countries, [cinp[c]["n"] for c in countries])))
+                    zip(countries, [cinp0[c]["n"] for c in countries])))
 
 
-def mgcfa_sequence(cinp: dict, countries: list[str], seed: int) -> dict:
+def all_country_score_means(df_w1: pd.DataFrame, pooled_fit: cfa.FitResult,
+                            mu_p, sd_p, min_cases: int = 30
+                            ) -> tuple[dict, dict]:
+    """Weighted Bartlett-f score mean for EVERY country, with no minimum-n
+    rule: the common metric on which countries below min_country_n are pooled
+    into the stratum-level analyses (prereg, Units of Analysis)."""
+    names = [it.var for it in C.F_ITEMS]
+    means, Ns = {}, {}
+    for ctry, d in df_w1.groupby(C.ADMIN["country"]):
+        X = (d[names].to_numpy(float) - mu_p) / sd_p
+        m = ~np.isnan(X).any(1)
+        if int(m.sum()) < min_cases:
+            continue
+        fs, _ = cfa.bartlett(pooled_fit, X[m])
+        w = d[C.ADMIN["weight"]].to_numpy(float)[m]
+        means[ctry] = float(np.average(fs[:, 0], weights=w))
+        Ns[ctry] = float(w.sum())
+    return means, Ns
+
+
+def _chen_pass(cfi_hi, rmsea_hi, cfi_lo, rmsea_lo) -> bool:
+    return bool(cfi_hi - cfi_lo >= C.H2["chen_dcfi"]
+                and rmsea_hi - rmsea_lo <= C.H2["chen_drmsea"])
+
+
+def _worst_intercept(sp: cfa.Spec, fit: dict, m_list, freed: list) -> tuple | None:
+    """(item, group) with the largest absolute mean residual under the fitted
+    scalar model -- the modification target for the partial-scalar step.
+    Documented simplification of a modification-index search; the exhaustive
+    variant is a Stage 2 lavaan parity item."""
+    L, nu, alpha = fit["L"], fit["nu"], fit["alpha"]
+    freed_set = set(freed)
+    best = None
+    for g in range(len(m_list)):
+        mu = nu + L @ alpha[g]
+        for i, item in enumerate(sp.items):
+            if (item, g) in freed_set:
+                continue
+            r = abs(float(m_list[g][i] - mu[i]))
+            if best is None or r > best[0]:
+                best = (r, (item, g))
+    return best[1] if best else None
+
+
+def mgcfa_sequence(cinp: dict, countries: list[str], seed: int,
+                   partial: bool = True) -> dict:
+    """Configural -> metric -> scalar -> PARTIAL scalar (prereg: 'sequential
+    multi-group CFA (configural, metric, partial scalar)'). If full scalar
+    fails Chen vs metric, intercepts are freed one at a time at the largest
+    mean residual, up to config.H2['mgcfa_max_free_intercepts']."""
     part = C.f_partition()
     sp = cfa.bifactor_spec(part)
     S_list = [cinp[c]["S"] for c in countries]
@@ -248,42 +400,96 @@ def mgcfa_sequence(cinp: dict, countries: list[str], seed: int) -> dict:
                                      / max(df_cfg * (Ntot - G), 1e-12))
     met = cfa.fit_ml_multigroup(sp, S_list, N_list, None, level="metric")
     sca = cfa.fit_ml_multigroup(sp, S_list, N_list, m_list, level="scalar")
-    return dict(
+    out = dict(
         configural=dict(cfi=float(cfi_cfg), rmsea=float(rmsea_cfg)),
         metric=dict(cfi=met["cfi"], rmsea=met["rmsea"],
                     dcfi=float(met["cfi"] - cfi_cfg),
                     drmsea=float(met["rmsea"] - rmsea_cfg),
-                    pass_chen=bool(met["cfi"] - cfi_cfg >= C.H2["chen_dcfi"]
-                                   and met["rmsea"] - rmsea_cfg
-                                   <= C.H2["chen_drmsea"])),
+                    pass_chen=_chen_pass(met["cfi"], met["rmsea"],
+                                         cfi_cfg, rmsea_cfg)),
         scalar=dict(cfi=sca["cfi"], rmsea=sca["rmsea"],
                     dcfi=float(sca["cfi"] - met["cfi"]),
                     drmsea=float(sca["rmsea"] - met["rmsea"]),
-                    pass_chen=bool(sca["cfi"] - met["cfi"] >= C.H2["chen_dcfi"]
-                                   and sca["rmsea"] - met["rmsea"]
-                                   <= C.H2["chen_drmsea"])))
+                    pass_chen=_chen_pass(sca["cfi"], sca["rmsea"],
+                                         met["cfi"], met["rmsea"])))
+    if partial and not out["scalar"]["pass_chen"]:
+        freed: list[tuple] = []
+        cur = sca
+        max_free = C.H2["mgcfa_max_free_intercepts"]
+        while (not _chen_pass(cur["cfi"], cur["rmsea"],
+                              met["cfi"], met["rmsea"])
+               and len(freed) < max_free):
+            target = _worst_intercept(sp, cur, m_list, freed)
+            if target is None:
+                break
+            freed.append(target)
+            cur = cfa.fit_ml_multigroup(sp, S_list, N_list, m_list,
+                                        level="scalar",
+                                        free_intercepts=tuple(freed))
+        out["partial_scalar"] = dict(
+            cfi=cur["cfi"], rmsea=cur["rmsea"],
+            dcfi=float(cur["cfi"] - met["cfi"]),
+            drmsea=float(cur["rmsea"] - met["rmsea"]),
+            pass_chen=_chen_pass(cur["cfi"], cur["rmsea"],
+                                 met["cfi"], met["rmsea"]),
+            freed=[(item, countries[g]) for item, g in freed],
+            n_freed=len(freed))
+    elif partial:
+        out["partial_scalar"] = dict(**out["scalar"], freed=[], n_freed=0)
+    return out
 
 
-def stratified_means(countries, alpha, lookups_dir):
+def stratified_means(score_means: dict, Ns: dict, retained: list[str],
+                     lookups_dir):
+    """Stratum-level f means (Inglehart-Welzel quadrant, income tier, majority
+    religious tradition) over ALL countries with data, on the common
+    configural pooled-loading Bartlett-score metric. Countries below the
+    country-level minimum n do not get country-level estimates but are pooled
+    into these stratum-level analyses (prereg, Units of Analysis)."""
     if not lookups_dir:
         return None
     from .data_io import load_lookup
     out = {}
-    for name, col in [("iw_scores.csv", None), ("income_tier.csv", "INCOME_TIER"),
+
+    def agg(key_map: dict) -> dict:
+        rows: dict = {}
+        for c, mval in score_means.items():
+            s = key_map.get(c)
+            if s is None:
+                continue
+            rows.setdefault(s, []).append((mval, Ns[c]))
+        return {s: float(np.average([v for v, _ in vals],
+                                    weights=[n for _, n in vals]))
+                for s, vals in rows.items()}
+
+    iw = load_lookup(lookups_dir, "iw_scores.csv")
+    if iw is not None:
+        iw = iw.set_index(C.ADMIN["country"])
+        quad = {}
+        for c in score_means:
+            if c in iw.index and np.isfinite(iw.loc[c, "IW_TRAD"]):
+                quad[c] = (("secular" if iw.loc[c, "IW_TRAD"] > 0
+                            else "traditional") + "/"
+                           + ("self-expression" if iw.loc[c, "IW_SURV"] > 0
+                              else "survival"))
+        if quad:
+            out["iw_quadrant"] = agg(quad)
+    for name, col in [("income_tier.csv", "INCOME_TIER"),
                       ("religion.csv", "RELIGION")]:
         d = load_lookup(lookups_dir, name)
         if d is None:
             continue
         d = d.set_index(C.ADMIN["country"])
-        if name == "iw_scores.csv":
-            quad = ["TS" if (d.loc[c, "IW_TRAD"] > 0) == (d.loc[c, "IW_SURV"] > 0)
-                    else "mixed" for c in countries if c in d.index]
-            out["iw_quadrant"] = quad
-        else:
-            key = [d.loc[c, col] if c in d.index else None for c in countries]
-            df = pd.DataFrame(dict(stratum=key, alpha=alpha))
-            out[col] = df.groupby("stratum")["alpha"].mean().to_dict()
-    return out or None
+        km = {c: d.loc[c, col] for c in score_means
+              if c in d.index and isinstance(d.loc[c, col], str)
+              and d.loc[c, col]}
+        if km:
+            out[col] = agg(km)
+    if not out:
+        return None
+    out["pooled_small_countries"] = sorted(c for c in score_means
+                                           if c not in retained)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -398,18 +604,33 @@ def run_h2b(h2a: dict, lookups_dir: str | None, seed: int,
     tr = load_lookup(lookups_dir, "translation_equivalence.csv") if lookups_dir else None
     if tr is not None and tr["T_EQUIV"].notna().any():
         tmap = tr.set_index([C.ADMIN["country"], "ITEM"])["T_EQUIV"].to_dict()
-        df["T"] = [tmap.get((c, v), 0.0) for c, v in zip(df.country, df.item)]
-        covered = df["T"].notna()
-        df = df[covered]                      # covered-item subset primary
+        # items without a Cowden classification stay NaN so the covered-item
+        # subset (prereg primary) actually subsets
+        df["T"] = [tmap.get((c, v), np.nan) for c, v in zip(df.country, df.item)]
         t_src = "cowden_classification"
     else:
-        df["T"] = 0.0
+        df["T"] = np.nan
         t_src = "ZERO_PLACEHOLDER (translation covariate not supplied)"
     df["dist_c"] = df["dist"] - df["dist"].mean()
 
-    md, model_kind, model_warning = _fit_h2b_model(df)
+    # full item set with T = 0 where unclassified: the prereg sensitivity
+    # (and the primary fallback when coverage is too thin to fit)
+    df_full = df.copy()
+    df_full["T"] = df_full["T"].fillna(0.0)
+    df_cov = df[df["T"].notna()].copy()       # covered-item subset primary
+    subset_used = "covered_items"
+    if len(df_cov) < 8 or df_cov["focal"].nunique() < 2:
+        df_cov = df_full
+        subset_used = "full_set_fallback (covered subset too thin)"
+
+    md, model_kind, model_warning = _fit_h2b_model(df_cov)
     coef = float(md.params.get("dist_c:focal", np.nan))
     pval = float(md.pvalues.get("dist_c:focal", np.nan))
+    md_full, full_kind, _ = _fit_h2b_model(df_full)
+    full_set = dict(
+        interaction_coef=float(md_full.params.get("dist_c:focal", np.nan)),
+        interaction_p=float(md_full.pvalues.get("dist_c:focal", np.nan)),
+        model_kind=full_kind)
     gated = h2a["tier"] <= 2
     if not gated:
         verdict = f"descriptive_only (H2a Tier {h2a['tier']}; confounding caveat)"
@@ -421,9 +642,10 @@ def run_h2b(h2a: dict, lookups_dir: str | None, seed: int,
         verdict = "disconfirmed"
     return dict(verdict=verdict, interaction_coef=coef, interaction_p=pval,
                 distance_source=dist_src, translation_source=t_src,
+                subset=subset_used, full_set=full_set,
                 model_kind=model_kind, model_warning=model_warning,
-                model_summary=str(md.summary()), data=df,
-                median_split=_median_split_sensitivity(df))
+                model_summary=str(md.summary()), data=df_cov,
+                median_split=_median_split_sensitivity(df_cov))
 
 
 def _fit_h2b_model(df: pd.DataFrame):

@@ -86,10 +86,34 @@ strategy, not a fit exercise.
 
 ## Notes
 
-* MI is m = 20 with per-country imputation in production; envelopes run on
-  imputation 1 (documented; headline statistics are Rubin-pooled).
+* MI is m = 20 with per-country imputation in production. H1, H2a, H3, and
+  H4 headline statistics are all Rubin-pooled over the full MI set; the H1
+  envelopes, the H2a partial-scalar search, the H4 reported bootstrap
+  distributions, and the H4 cross-checks run on imputation 1 (documented
+  cost bound).
 * All survey weights are within-country normalized; PSU clustering enters
   through the H3 bootstrap and the H4 wild cluster bootstrap at country
-  level per the prereg.
+  level per the prereg. The H1 comparator regime (Pearson matrix, Vuong,
+  network fit, CV) is survey-weighted too.
+* H1 leg (i) enforces ECV >= 0.65 (Hypotheses section) alongside omega_h
+  and fit; the Hypotheses-vs-Inference-Criteria discrepancy is flagged in
+  the run summary next to the omega_h 0.75/0.80 one.
+* H2a's MGCFA sensitivity includes the pre-registered partial-scalar step
+  (intercepts freed at the largest mean residual, capped in config).
+  Countries below min_country_n are pooled into the stratum-level analyses
+  on the configural-score metric rather than dropped.
+* H2b fits the covered-item subset as primary and the full item set as the
+  pre-registered sensitivity.
+* H3 reports the Hamaker-Muthen cross-level decomposition (within-FE vs
+  between-country vs contextual) and two multilevel sensitivities
+  (country-free measurement; country random intercepts). At H2a Tier 3/4
+  with divergence, the headline switches to the measurement-free
+  sensitivity per the prereg.
+* H4a verdicts consume both decision statistics: Delta_fit against the
+  calibrated per-truth thresholds and kappa against the config floor. The
+  confusion matrix covers the full w_L x mu_ratio grid.
+* The joint-configuration hard rule (substantive package stands only on
+  H1 AND H3 confirmed) is computed by report.joint_configuration and
+  printed at the top of every run summary.
 * Every constant carries a comment naming its prereg section. Nothing
   downstream hard-codes a threshold.

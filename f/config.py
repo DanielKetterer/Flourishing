@@ -131,7 +131,10 @@ H1 = dict(
     # Criteria confirmation tier states >= 0.80. The decision rules here follow
     # the Inference Criteria (authoritative for verdicts); the 0.75/0.80
     # discrepancy is flagged in report.py so it can be reconciled in v8 text.
-    ecv_min=0.65,                  # Hypotheses section
+    # ECV >= 0.65 appears in the Hypotheses section but not in Inference
+    # Criteria leg (i); the verdict enforces it (stricter) and report.py flags
+    # the discrepancy alongside the omega_h one.
+    ecv_min=0.65,                  # Hypotheses section; enforced in leg (i)
     cfi_min=0.90, rmsea_max=0.08, srmr_max=0.08,
     # leg (ii): permutation envelopes
     gap_omega=0.05, gap_ecv=0.05,
@@ -176,6 +179,15 @@ H2 = dict(
     mc_violation_fracs=(0.0, 0.10, 0.25, 0.40),
     mc_magnitudes=(0.2, 0.4),
     mc_reps=40,
+    # prereg: "GFS-matched group sizes" -- Wave 1 is ~200k over 22 countries,
+    # so ~9,000 per country. Polychoric/DWLS cost is table-based, so the MC
+    # cost is nearly N-independent. STAGE2-LOCK: replace with the released
+    # per-country analytic n's.
+    mc_n_per_country=9000,
+    # MGCFA partial-scalar search: max intercepts freed before stopping
+    # (documented simplification; the exhaustive search is a Stage 2 lavaan
+    # parity item)
+    mgcfa_max_free_intercepts=5,
 )
 
 H3 = dict(
@@ -186,6 +198,13 @@ H3 = dict(
     cosine_confirm=0.85,           # residualized-construct cosine (constitutive)
     cosine_disconfirm=0.70,
     n_boot=500,                    # PSU-cluster bootstrap for SEs
+    # prereg (Statistical Models, H3): the multilevel SEM sensitivity with
+    # country-level measurement parameters freely estimated is "headline at
+    # H2a Tier 3/4 if it diverges from the country-FE primary". Divergence
+    # rule implemented as |beta_sens - beta_primary| exceeding this on any
+    # outcome, or a change in which outcomes clear beta_min. STAGE2-LOCK:
+    # confirm against the v8 divergence definition.
+    headline_divergence=0.05,
 )
 
 H4 = dict(
@@ -206,6 +225,12 @@ H4 = dict(
     # H4a calibration
     h4a_alpha=0.05,                # per-truth error rate for verdict thresholds
     h4a_nsim=200,                  # parametric-bootstrap replicates per truth
+    # prereg: verdicts are issued from (Delta_fit, kappa). kappa is the
+    # separation (1 - overlap) of the two parametric-bootstrap Delta_fit
+    # distributions; below this floor the channels are not distinguishable at
+    # the design's power and the verdict is Indistinguishable regardless of
+    # d_obs. PLACEHOLDER default -- Stage 2 addendum item (vii) locks it.
+    h4a_kappa_min=0.50,
     # pre-flight diagnostic bands (placeholders; Stage 2 addendum item v)
     preflight=dict(trace_frac=(0.05, 0.99), diag_range=(-0.25, 1.10),
                    spectral_radius_max=1.00, homogeneity_max=0.15,
