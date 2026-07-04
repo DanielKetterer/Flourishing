@@ -3,7 +3,10 @@ h1_structure.py -- H1: structural replication of the bifactor beyond fitting
 propensity, against the pre-registered comparators.
 
 Legs (Inference Criteria, all four must clear for confirmation):
-  (i)   omega_h >= 0.80 with CFI >= 0.90, RMSEA <= 0.08, SRMR <= 0.08
+  (i)   omega_h >= 0.80 with CFI >= 0.90, RMSEA <= 0.08, SRMR <= 0.08,
+        plus ECV >= 0.65 (Hypotheses section; absent from the Inference
+        Criteria leg (i) text -- enforced here as the stricter reading and
+        flagged in report.py for v8 reconciliation)
   (ii)  partition-specificity gaps (Envelope B) >= 0.05 on omega_h and ECV,
         loading-magnitude check, value-permutation criterion (Envelope A)
   (iii) f-loading direction stable across hedonic specifications
@@ -22,12 +25,11 @@ item against the authoritative v8 gap definitions.
 
 from __future__ import annotations
 import numpy as np
-from sklearn.covariance import GraphicalLassoCV, GraphicalLasso
 from sklearn.metrics import adjusted_rand_score
 
 from . import config as C
 from . import cfa
-from .polychoric import polychoric_matrix, nearest_pd_corr
+from .polychoric import polychoric_matrix, pearson_corr_weighted
 from .data_io import rubin_pool
 
 RNG = np.random.default_rng
@@ -143,36 +145,38 @@ def gap_report(observed, env_records, q):
 # MAGNA / network comparator
 # ---------------------------------------------------------------------------
 
-def gaussian_m2ll(Z, K):
-    N, p = Z.shape
-    S = (Z.T @ Z) / N
+def gaussian_m2ll(S, K, N):
+    """-2 lnL of precision K against (weighted) moment matrix S at
+    effective sample size N."""
+    p = S.shape[0]
     sgn, logdetK = np.linalg.slogdet(K)
     return N * (p * np.log(2 * np.pi) - logdetK + float(np.sum(K * S)))
 
 
-def fit_magna(Z, seed=0):
-    """Regularized Gaussian network on the same items: GraphicalLasso with
-    EBIC (gamma = 0.5) selection over the CV alpha path -- the standard
-    psychonetrics-style GGM estimate this Python deposit uses in place of
-    MAGNA proper; the R cross-check is a Stage 2 parity item."""
-    gl = GraphicalLassoCV(cv=3).fit(Z)
-    alphas = np.unique(np.concatenate([gl.cv_results_["alphas"],
-                                       [gl.alpha_]]))
-    N, p = Z.shape
+def fit_magna(S, N, seed=0):
+    """Regularized Gaussian network on the same items: graphical lasso over a
+    log-spaced penalty path with EBIC (gamma = 0.5) selection, fit to the
+    survey-weighted correlation matrix (prereg: comparators on the same
+    weights) -- the standard psychonetrics-style GGM estimate this Python
+    deposit uses in place of MAGNA proper; the R cross-check is a Stage 2
+    parity item."""
+    from sklearn.covariance import graphical_lasso
+    p = S.shape[0]
+    off_max = float(np.abs(S - np.eye(p)).max())
+    alphas = np.geomspace(max(off_max, 1e-3), 1e-3, 25)
     best = None
     for a in alphas:
         try:
-            m = GraphicalLasso(alpha=a, max_iter=200).fit(Z)
+            _, K = graphical_lasso(S, alpha=float(a), max_iter=200)
         except Exception:
             continue
-        K = m.precision_
         E = int((np.abs(K[np.triu_indices(p, 1)]) > 1e-8).sum())
-        ebic = gaussian_m2ll(Z, K) + E * np.log(N) + 4 * 0.5 * E * np.log(p)
+        ebic = gaussian_m2ll(S, K, N) + E * np.log(N) + 4 * 0.5 * E * np.log(p)
         if best is None or ebic < best[0]:
-            best = (ebic, K, E, a)
+            best = (ebic, K, E, float(a))
     ebic, K, E, a = best
-    return dict(K=K, edges=E, alpha=float(a), ebic=float(ebic),
-                m2ll=float(gaussian_m2ll(Z, K)), n_params=E + p)
+    return dict(K=K, edges=E, alpha=a, ebic=float(ebic),
+                m2ll=float(gaussian_m2ll(S, K, N)), n_params=E + p)
 
 
 def network_communities(K, items, seed=0):
@@ -206,21 +210,29 @@ def network_communities(K, items, seed=0):
     return labels, method
 
 
-def magna_cv(Z, holdout, seed=0):
+def magna_cv(Z, w, holdout, seed=0):
     rng = RNG(seed)
     n = Z.shape[0]
     te = rng.random(n) < holdout
     tr = ~te
-    net = fit_magna(Z[tr], seed=seed)
+    S_tr = pearson_corr_weighted(Z[tr], w[tr])
+    net = fit_magna(S_tr, float(w[tr].sum()), seed=seed)
     K = net["K"]
-    # heldout Gaussian log-likelihood + nodewise predictive R2
-    ll_te = -0.5 * gaussian_m2ll(Z[te], K) / te.sum()
+    # heldout Gaussian log-likelihood (per effective case) + nodewise R2,
+    # both survey-weighted
+    S_te = pearson_corr_weighted(Z[te], w[te])
+    ll_te = -0.5 * gaussian_m2ll(S_te, K, 1.0)
     B = -K / np.diag(K)[:, None]
     np.fill_diagonal(B, 0.0)
     pred = Z[te] @ B.T
-    r2 = 1 - np.mean((Z[te] - pred) ** 2, 0) / np.maximum(Z[te].var(0), 1e-9)
+    wte = w[te]
+    mse = np.average((Z[te] - pred) ** 2, axis=0, weights=wte)
+    mu_te = np.average(Z[te], axis=0, weights=wte)
+    var_te = np.average((Z[te] - mu_te) ** 2, axis=0, weights=wte)
+    r2 = 1 - mse / np.maximum(var_te, 1e-9)
     return dict(heldout_ll_per_case=float(ll_te),
-                nodewise_r2_mean=float(np.mean(r2)), train_net=net, test=te)
+                nodewise_r2_mean=float(np.mean(r2)), train_net=net, test=te,
+                S_test=S_te)
 
 
 # ---------------------------------------------------------------------------
@@ -269,9 +281,12 @@ def run_h1(imputed_w1: list, seed: int, smoke: bool = False) -> dict:
                      - np.mean([r["omega_h"] for r in altB_stats])) < 0.05)
 
     # --- comparators on the ML continuous-approximation regime
+    # (prereg: "fitted on the same items, imputation, and weights" -- the
+    # correlation matrix, Vuong statistic, network fit, and CV metrics are
+    # all survey-weighted; effective N = sum of normalized weights)
     Z, wz = standardized_items(imputed_w1[0], items, w_all[0])
-    S_p = nearest_pd_corr(np.corrcoef(Z, rowvar=False))
-    N0 = Z.shape[0]
+    S_p = pearson_corr_weighted(Z, wz)
+    N0 = float(wz.sum())
     sp_bif = cfa.bifactor_spec(part)
     ml_bif = cfa.fit_ml(sp_bif, S_p, N0, seed=seed)
     sp_s1 = cfa.bifactor_spec(part, s1_reference="mental")
@@ -286,23 +301,23 @@ def run_h1(imputed_w1: list, seed: int, smoke: bool = False) -> dict:
     aic_b, bic_b = cfa.aic_bic(ml_bif)
     aic_s1, bic_s1 = cfa.aic_bic(ml_s1)
     aic_sw, bic_sw = cfa.aic_bic(ml_swb)
-    vuong = cfa.vuong_test(ml_bif, ml_swb, Z)
+    vuong = cfa.vuong_test(ml_bif, ml_swb, Z, w=wz)
     cos_swb = cfa.cosine(np.abs(ml_bif.loading_vector("f")),
                          np.abs(ml_swb.loading_vector("f")))
 
-    net = fit_magna(Z, seed=seed)
+    net = fit_magna(S_p, N0, seed=seed)
     bic_net = net["m2ll"] + net["n_params"] * np.log(N0)
     aic_net = net["m2ll"] + 2 * net["n_params"]
     labels, comm_method = network_communities(net["K"], names, seed=seed)
     block_labels = [it.domain for it in items]            # hedonic = own block
     ari = float(adjusted_rand_score(block_labels, labels))
-    cv = magna_cv(Z, cfg["magna_holdout"], seed=seed)
-    ml_bif_tr = cfa.fit_ml(sp_bif, nearest_pd_corr(
-        np.corrcoef(Z[~cv["test"]], rowvar=False)), int((~cv["test"]).sum()),
-        seed=seed)
-    Sig_tr = ml_bif_tr.implied()
-    Kb = np.linalg.inv(Sig_tr)
-    cv_bif_ll = -0.5 * gaussian_m2ll(Z[cv["test"]], Kb) / cv["test"].sum()
+    cv = magna_cv(Z, wz, cfg["magna_holdout"], seed=seed)
+    tr_mask = ~cv["test"]
+    ml_bif_tr = cfa.fit_ml(sp_bif, pearson_corr_weighted(Z[tr_mask],
+                                                         wz[tr_mask]),
+                           float(wz[tr_mask].sum()), seed=seed)
+    Kb = np.linalg.inv(ml_bif_tr.implied())
+    cv_bif_ll = -0.5 * gaussian_m2ll(cv["S_test"], Kb, 1.0)
 
     # --- envelopes (imputation 1; documented in README)
     N1 = float(w_all[0].sum())
@@ -325,7 +340,10 @@ def run_h1(imputed_w1: list, seed: int, smoke: bool = False) -> dict:
     fitok = (pooled["cfi"]["point"] >= cfg["cfi_min"]
              and pooled["rmsea"]["point"] <= cfg["rmsea_max"]
              and pooled["srmr"]["point"] <= cfg["srmr_max"])
-    leg1 = oh >= cfg["omega_h_confirm"] and fitok
+    # ECV >= 0.65 is a Hypotheses-section requirement absent from Inference
+    # Criteria leg (i); enforced here (stricter reading), flagged in report.py
+    leg1 = (oh >= cfg["omega_h_confirm"] and fitok
+            and pooled["ecv"]["point"] >= cfg["ecv_min"])
     leg2 = (signed_gap["omega_h"] >= cfg["gap_omega"]
             and signed_gap["ecv"] >= cfg["gap_ecv"] and load_check
             and gaps["A"]["omega_h"]["percentile"] >= cfg["envelope_quantile"])
@@ -367,7 +385,8 @@ def run_h1(imputed_w1: list, seed: int, smoke: bool = False) -> dict:
         R_list=R_list, V_list=V_list, fits=fits,
         note_thresholds="0.75 (Hypotheses) vs 0.80 (Inference Criteria) "
                         "omega_h discrepancy encoded per Inference Criteria; "
-                        "reconcile in v8 text.",
+                        "ECV >= 0.65 (Hypotheses only) enforced in leg (i) as "
+                        "the stricter reading; reconcile both in v8 text.",
     )
 
 

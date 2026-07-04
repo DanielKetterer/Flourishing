@@ -301,12 +301,15 @@ def aic_bic(fit: FitResult) -> tuple[float, float]:
     return m2ll + 2 * k, m2ll + k * np.log(fit.N)
 
 
-def vuong_test(fitA: FitResult, fitB: FitResult, Z: np.ndarray
-               ) -> dict[str, float]:
+def vuong_test(fitA: FitResult, fitB: FitResult, Z: np.ndarray,
+               w: np.ndarray | None = None) -> dict[str, float]:
     """Vuong (1989) non-nested LR z from casewise Gaussian log-densities.
 
     Z: (N, p) standardized complete-case data both models were fit to.
-    Positive z favors model A. BIC-adjusted variant also returned.
+    w: optional survey weights (prereg: comparators on the same weights);
+    the casewise mean/variance of the log-density differences are then
+    weight-averaged with effective n = sum(w). Positive z favors model A.
+    BIC-adjusted variant also returned.
     """
     def case_ll(fit):
         Sig = fit.implied()
@@ -316,14 +319,17 @@ def vuong_test(fitA: FitResult, fitB: FitResult, Z: np.ndarray
         return -0.5 * (Z.shape[1] * np.log(2 * np.pi) + logdet + quad)
 
     d = case_ll(fitA) - case_ll(fitB)
-    n = d.size
+    ww = np.ones(d.size) if w is None else np.asarray(w, float)
+    n = float(ww.sum())
     kA = fitA.spec.n_free() + len(fitA.spec.items)
     kB = fitB.spec.n_free() + len(fitB.spec.items)
-    sd = d.std(ddof=1)
-    z = np.sqrt(n) * d.mean() / sd if sd > 0 else 0.0
-    z_bic = np.sqrt(n) * (d.mean() - (kA - kB) * np.log(n) / (2 * n)) / sd \
+    mean = float(np.average(d, weights=ww))
+    var = float(np.average((d - mean) ** 2, weights=ww))
+    sd = np.sqrt(var * d.size / max(d.size - 1, 1))
+    z = np.sqrt(n) * mean / sd if sd > 0 else 0.0
+    z_bic = np.sqrt(n) * (mean - (kA - kB) * np.log(n) / (2 * n)) / sd \
         if sd > 0 else 0.0
-    return dict(z=float(z), z_bic=float(z_bic), mean_diff=float(d.mean()))
+    return dict(z=float(z), z_bic=float(z_bic), mean_diff=mean)
 
 
 # ---------------------------------------------------------------------------

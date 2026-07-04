@@ -226,6 +226,9 @@ def h4a_dists(h4, outdir):
     axes[0].set_title(f"H4a cross-fitting -> {h4a['verdict']} "
                       f"(kappa = {h4a['kappa']:.2f})")
     conf = h4["confusion"]
+    if "mu_ratio" in conf.columns:      # show the mu-averaged w_L margin
+        conf = (conf.groupby("w_true")[["Latent", "Indistinguishable",
+                                        "Mutualism"]].mean().reset_index())
     bottom = np.zeros(len(conf))
     for k, col in [("Latent", "#4477aa"), ("Indistinguishable", "#dddddd"),
                    ("Mutualism", "#cc6677")]:
@@ -234,7 +237,7 @@ def h4a_dists(h4, outdir):
         bottom += conf[k].to_numpy()
     axes[1].set_xlabel("w_L (truth)"); axes[1].set_ylabel("verdict share")
     axes[1].legend(fontsize=8)
-    axes[1].set_title("H4a confusion profile over the calibration grid")
+    axes[1].set_title("H4a confusion profile over the w x mu grid")
     _save(fig, outdir, "h4a_crossfit.png")
 
 

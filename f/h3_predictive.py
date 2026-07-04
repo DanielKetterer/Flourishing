@@ -153,8 +153,9 @@ def croon_regression(frame: pd.DataFrame, ycol2: str, ycol1: str,
 
 
 def psu_bootstrap(frame, res, B, seed) -> float:
-    """Cluster bootstrap over PSUs (fixed measurement stage -- documented
-    approximation; full-refit variant available via h3(..., full_refit))."""
+    """Cluster bootstrap over PSUs. The measurement stage is held fixed
+    across replicates -- a documented approximation (the full-refit
+    bootstrap is part of the Stage 2 lavaan parity check)."""
     rng = RNG(seed)
     psus = frame.loc[res["mask"], C.ADMIN["psu"]].to_numpy()
     X, w = res["X"], res["weights"]
@@ -181,6 +182,91 @@ def psu_bootstrap(frame, res, B, seed) -> float:
             continue
         out.append(bb[1] * np.sqrt(var_f) / np.sqrt(Cc[0, 0]))
     return float(np.std(out, ddof=1)) if len(out) > 3 else np.nan
+
+
+def between_country(frame: pd.DataFrame, ycol2: str, ycol1: str,
+                    fs_f: np.ndarray) -> dict:
+    """Between-country leg of the Hamaker-Muthen (2020) cross-level
+    decomposition (prereg H3): weighted regression of country-mean outcome
+    (follow-up) on country-mean f, country-mean baseline controlled, on the
+    same LODO-score metric as the primary estimand. The within coefficient is
+    the country-FE primary; the contextual effect is between minus within."""
+    w = frame[C.ADMIN["weight"]].to_numpy(float)
+    d = frame.copy()
+    d["_f"] = fs_f
+    rows = []
+    for c, idx in d.groupby(C.ADMIN["country"]).indices.items():
+        sub = d.iloc[idx]
+        m = ~(sub[ycol2].isna() | sub[ycol1].isna()
+              | sub["_f"].isna()).to_numpy()
+        if m.sum() < 20:
+            continue
+        wc = w[idx][m]
+        rows.append(dict(
+            country=c,
+            y2=float(np.average(sub[ycol2].to_numpy(float)[m], weights=wc)),
+            y1=float(np.average(sub[ycol1].to_numpy(float)[m], weights=wc)),
+            f=float(np.average(sub["_f"].to_numpy(float)[m], weights=wc)),
+            n=float(wc.sum())))
+    bdf = pd.DataFrame(rows)
+    if len(bdf) < 4:
+        return dict(beta_between=np.nan, n_countries=len(bdf),
+                    error="too few countries for the between regression")
+    W = bdf["n"].to_numpy()
+
+    def wstd(v):
+        v = np.asarray(v, float)
+        mu = np.average(v, weights=W)
+        sd = np.sqrt(np.average((v - mu) ** 2, weights=W))
+        return (v - mu) / (sd if sd > 0 else 1.0)
+
+    Xs = np.column_stack([wstd(bdf["y1"]), wstd(bdf["f"])])
+    ys = wstd(bdf["y2"])
+    try:
+        b = np.linalg.solve(Xs.T @ (W[:, None] * Xs), Xs.T @ (W * ys))
+    except np.linalg.LinAlgError:
+        return dict(beta_between=np.nan, n_countries=int(len(bdf)),
+                    error="singular between-country design")
+    return dict(beta_between=float(b[1]), n_countries=int(len(bdf)))
+
+
+def random_effects_sensitivity(frame: pd.DataFrame, ycol2: str, ycol1: str,
+                               fs_f: np.ndarray, err_f: float,
+                               fs_p: np.ndarray, err_p: float) -> dict:
+    """Country-random-intercepts multilevel sensitivity (prereg H3):
+    MixedLM of the standardized follow-up outcome on baseline, f, p, and the
+    demographic controls with a country random intercept, then post-hoc
+    disattenuation of the f slope by the Bartlett score reliability.
+    Documented approximation of the random-effects multilevel SEM (unweighted
+    likelihood; single-predictor attenuation factor); the full model is a
+    Stage 2 lavaan parity item."""
+    import statsmodels.formula.api as smf
+    ctrl = list(C.H3_CONTROLS.values())
+    d = pd.DataFrame({
+        "y2": frame[ycol2].to_numpy(float),
+        "y1": frame[ycol1].to_numpy(float),
+        "f": fs_f, "p": fs_p,
+        "grp": frame[C.ADMIN["country"]].to_numpy()})
+    for i, c in enumerate(ctrl):
+        d[f"c{i}"] = frame[c].to_numpy(float)
+    d = d.replace([np.inf, -np.inf], np.nan).dropna()
+    if len(d) < 50 or d["grp"].nunique() < 3:
+        return dict(beta_f=np.nan, error="insufficient data for MixedLM")
+    var_f_raw = float(d["f"].var())
+    rel_f = max((var_f_raw - err_f) / var_f_raw, 0.10) if var_f_raw > 0 else 1.0
+    for c in ["y2", "y1", "f", "p"] + [f"c{i}" for i in range(len(ctrl))]:
+        sd = d[c].std()
+        d[c] = (d[c] - d[c].mean()) / (sd if sd > 0 else 1.0)
+    formula = "y2 ~ y1 + f + p + " + " + ".join(f"c{i}"
+                                                for i in range(len(ctrl)))
+    try:
+        md = smf.mixedlm(formula, d, groups=d["grp"]).fit(reml=True,
+                                                          method="lbfgs")
+        beta_naive = float(md.params["f"])
+    except (np.linalg.LinAlgError, ValueError) as exc:
+        return dict(beta_f=np.nan, error=str(exc))
+    return dict(beta_f=beta_naive / rel_f, beta_naive=beta_naive,
+                reliability_f=float(rel_f))
 
 
 def bh_fdr(pvals: dict[str, float], q: float) -> dict[str, bool]:
@@ -272,7 +358,7 @@ def riclpm(X: np.ndarray, Y: np.ndarray, w: np.ndarray) -> dict:
 # ---------------------------------------------------------------------------
 
 def run_h3(imputed_panels: list[pd.DataFrame], seed: int,
-           smoke: bool = False) -> dict:
+           smoke: bool = False, h2a_tier: int | None = None) -> dict:
     cfg = C.H3
     B = C.SMOKE["h3_boot"] if smoke else cfg["n_boot"]
     fnames = [it.var for it in C.F_ITEMS]
@@ -280,9 +366,12 @@ def run_h3(imputed_panels: list[pd.DataFrame], seed: int,
     names18 = fnames + pnames
     ncats = [it.n_cat for it in C.F_ITEMS] + [it.n_cat for it in C.P_ITEMS]
     w1cols = [f"{v}_w1" for v in names18]
+    min_country_rows = 150            # per-country measurement sensitivity
 
     per_outcome: dict[str, dict] = {k: dict(beta=[], beta_p=[], beta_full=[],
-                                            beta_w3=[]) for k in C.H3_OUTCOMES}
+                                            beta_w3=[], beta_between=[],
+                                            beta_cm=[], beta_re=[])
+                                    for k in C.H3_OUTCOMES}
     match_report, cosines, se_boot = {}, {}, {}
     riclpm_out, p_meta = {}, None
 
@@ -294,6 +383,17 @@ def run_h3(imputed_panels: list[pd.DataFrame], seed: int,
         mu = np.nanmean(X18, 0); sd = np.nanstd(X18, 0)
         Z18 = (X18 - mu) / np.where(sd > 0, sd, 1)
         Z18 = np.nan_to_num(Z18)
+
+        # per-country polychorics for the country-free-measurement
+        # sensitivity (countries below min_country_rows keep pooled loadings)
+        cty = panel[C.ADMIN["country"]].to_numpy()
+        country_R: dict = {}
+        for c in np.unique(cty):
+            rows = np.where(cty == c)[0]
+            if rows.size < min_country_rows:
+                continue
+            Rc, Vc = polychoric_matrix(X18[rows], w[rows], ncats)
+            country_R[c] = (Rc, Vc, rows, float(w[rows].sum()))
 
         pfit, p_meta = fit_p(R18, V18, names18, N, seed + k_imp)
         z_p = Z18[:, [names18.index(v) for v in pnames]]
@@ -336,6 +436,37 @@ def run_h3(imputed_panels: list[pd.DataFrame], seed: int,
             if y3 in panel.columns:
                 res3 = croon_regression(panel, y3, y1, fs_f, err_f, fs_p, err_p)
                 per_outcome[out_name]["beta_w3"].append(res3["beta_f"])
+
+            # between-country leg of the Hamaker-Muthen decomposition
+            bc = between_country(panel, y2, y1, fs_f)
+            per_outcome[out_name]["beta_between"].append(bc["beta_between"])
+
+            # multilevel sensitivity 1: country-level measurement free
+            # (respondents scored under their own country's LODO loadings)
+            fs_cm = fs_f.copy()
+            err_cm_acc = []
+            for c, (Rc, Vc, rows, Nc) in country_R.items():
+                try:
+                    lfit_c = lodo_fit(Rc, Vc, names18, Nc, dd, seed + k_imp)
+                    zc = Z18[np.ix_(rows, [names18.index(v)
+                                           for v in lfit_c.spec.items])]
+                    fs_c, errC = cfa.bartlett(lfit_c, zc)
+                    fs_cm[rows] = fs_c[:, 0]
+                    err_cm_acc.append((float(errC[0, 0]), Nc))
+                except (np.linalg.LinAlgError, ValueError):
+                    continue                 # country keeps pooled loadings
+            err_cm = (float(np.average([e for e, _ in err_cm_acc],
+                                       weights=[n for _, n in err_cm_acc]))
+                      if err_cm_acc else err_f)
+            res_cm = croon_regression(panel, y2, y1, fs_cm, err_cm,
+                                      fs_p, err_p)
+            per_outcome[out_name]["beta_cm"].append(res_cm["beta_f"])
+
+            # multilevel sensitivity 2: country random intercepts
+            res_re = random_effects_sensitivity(panel, y2, y1, fs_f, err_f,
+                                                fs_p, err_p)
+            per_outcome[out_name]["beta_re"].append(res_re.get("beta_f",
+                                                               np.nan))
             if k_imp == 0:
                 se_boot[out_name] = psu_bootstrap(panel, res, B, seed)
                 cosines[out_name] = residualized_cosine(
@@ -358,6 +489,7 @@ def run_h3(imputed_panels: list[pd.DataFrame], seed: int,
         z = pool["point"] / se_tot if se_tot and np.isfinite(se_tot) else np.nan
         p = 2 * (1 - norm.cdf(abs(z))) if np.isfinite(z) else np.nan
         pvals[out_name] = p
+        beta_between = float(np.nanmean(per_outcome[out_name]["beta_between"]))
         results[out_name] = dict(
             beta=pool["point"], se=se_tot, p=p,
             beta_p_composite=float(np.mean(per_outcome[out_name]["beta_p"])),
@@ -366,7 +498,17 @@ def run_h3(imputed_panels: list[pd.DataFrame], seed: int,
             if per_outcome[out_name]["beta_w3"] else np.nan,
             cosine=cosines.get(out_name, np.nan),
             match=match_report.get(out_name),
-            riclpm=riclpm_out.get(out_name))
+            riclpm=riclpm_out.get(out_name),
+            # Hamaker-Muthen cross-level decomposition: within = country-FE
+            # primary, contextual = between - within
+            between=dict(beta_between=beta_between,
+                         beta_within=pool["point"],
+                         contextual=float(beta_between - pool["point"])),
+            sensitivities=dict(
+                country_measurement_beta=float(
+                    np.nanmean(per_outcome[out_name]["beta_cm"])),
+                random_effects_beta=float(
+                    np.nanmean(per_outcome[out_name]["beta_re"]))))
     fdr = bh_fdr(pvals, cfg["fdr_q"])
     confirming = [k for k, r in results.items()
                   if r["beta"] >= cfg["beta_min"] and fdr[k]
@@ -386,9 +528,28 @@ def run_h3(imputed_panels: list[pd.DataFrame], seed: int,
         verdict = "disconfirmed"
     else:
         verdict = "partial"
+
+    # prereg headline-switch rule: the country-free-measurement multilevel
+    # sensitivity becomes the headline at H2a Tier 3/4 if it diverges from
+    # the country-FE primary
+    diverges = False
+    for k, r in results.items():
+        b_cm = r["sensitivities"]["country_measurement_beta"]
+        if not np.isfinite(b_cm):
+            continue
+        if (abs(b_cm - r["beta"]) > cfg["headline_divergence"]
+                or (b_cm >= cfg["beta_min"]) != (r["beta"] >= cfg["beta_min"])):
+            diverges = True
+    headline = ("multilevel_measurement_sensitivity"
+                if (h2a_tier in (3, 4) and diverges)
+                else "country_fe_primary")
+
     return dict(verdict=verdict, results=results, fdr=fdr,
                 confirming=confirming, riclpm_opposite=opp_riclpm,
-                p_composite=p_meta, between_country=None,
+                p_composite=p_meta,
+                between_country={k: r["between"] for k, r in results.items()},
+                headline=headline, h2a_tier=h2a_tier,
+                sensitivity_diverges=diverges,
                 note="full-f betas are secondary, part-whole contaminated "
                      "by construction (prereg language).")
 
